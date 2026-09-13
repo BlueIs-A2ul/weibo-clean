@@ -3,7 +3,7 @@
 > 状态：已于 2026-09-13 由自动化脚本完成（`../scripts/m0_spike_v3~v5.py`，只读请求），全部通过。结论见 `../fixtures/m0-findings.md`。以下清单保留作为背景与复验步骤。
 
 - 版本：2026-09-13
-- 配套：`technical-design.md` 第 2 节、`../README.md` 第 7 节 M0
+- 配套：`technical-design.md` 第 2 节、`feasibility.md` 第 7 节 M0
 - 执行人：你（需要在浏览器里手动操作，约 3~4 小时）
 - 产出：填好的 `m0-findings.md` + `fixtures/` 下的原始响应样本
 
