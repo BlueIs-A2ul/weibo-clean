@@ -104,3 +104,19 @@ GET https://weibo.com/ajax/feed/allGroups
 - `has_filtered_attentions` 导致少量关注不可枚举，属平台行为，无法绕过；UI 不提示，仅日志记录。
 - 请求频率保持人类节奏（≥2s 间隔），高频有风控风险。
 - weibo.com Cookie 不适用于 m.weibo.cn（m 站接口返回未登录），客户端统一走 weibo.com。
+
+## M1 白名单补充验证（2026-09-13）
+
+| 编号 | 项目 | 结论 | 证据文件 |
+|---|---|---|---|
+| V8 | 个人时间线（未关注账号） | 通过：`GET /ajax/statuses/mymblog?uid={uid}&page=1&feature=0` 对未关注账号可用，`data.list[]` 28 条 | `live/w_mymblog_unknown_f0.json` |
+| V9 | 个人时间线是否含转发 | `feature=0`（全部）= 含转发（28 条中 4 条带 `retweeted_status`）；`feature=1`（原创）= 不含转发（19 条） | `live/w_mymblog_unknown_f1.json` |
+| V10 | 已关注账号抽样一致性 | 通过：同一端点对已关注账号同样可用 | `live/w_mymblog_followed_f0.json` |
+| V11 | profile/info 字段复核 | 通过：`idstr`/`screen_name`/`profile_image_url`/`following` 均存在 | `live/w_profile_info_unknown.json` |
+
+补充说明：
+
+- `created_at` 格式为 `%a %b %d %H:%M:%S %z %Y`（如 `Sun Sep 13 03:25:05 +0800 2026`），解析器已按此实现，ISO 作为兜底。
+- 列表首条可能是置顶帖（`isTop: 1`，日期较旧），合并进信息流后按时间倒序自然下沉，无需特殊处理。
+- 帖子自带 `isAd`；`user.following` 对未关注作者为 `false`（白名单判定依赖 added 集合）。
+- 客户端实现采用 `feature=0`（与 friendstimeline 一致，含转发）。
