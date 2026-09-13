@@ -139,6 +139,10 @@ CREATE TABLE setting (k TEXT PRIMARY KEY, v TEXT);
 
 ## 4. 过滤引擎（核心）
 
+> **v0.2+ 变更**：R2/R4 的判定依据已从"关注集合"升级为"白名单"（生效白名单 = 关注 ∪ 手动添加 − 手动移除），
+> 关注仍是默认基底；设计与存储见 `superpowers/specs/2026-09-13-whitelist-design.md`。
+> 下文示例中的 `following` 集合可视为白名单谓词的简化表达。
+
 ```python
 def visible_comments(roots, following: set[str]) -> list[Node]:
     return [n for n in (walk(r, following) for r in roots) if n]
