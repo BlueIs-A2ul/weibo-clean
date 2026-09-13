@@ -1414,8 +1414,25 @@ git tag demo-v0.1.0
 
 ## 完成标准（Definition of Done）
 
-- `pytest -v` 全绿（19 个用例）；
+- `pytest -v` 全绿（35 个用例）；
 - 浏览器可完成：看关注流 → 点开帖子 → 看过滤评论 → 展开楼中楼 → 看到孤儿回复标注；
 - 全过程中未关注用户的昵称/评论在页面上不可见；
 - Cookie 失效、限流、接口异常都有明确提示；
 - `git log` 呈现按任务的渐进式提交，`cookie.txt` 与原始抓包未入库。
+
+---
+
+## 实施后的偏差记录（2026-09-13）
+
+以下为执行过程中经双重审查批准的改进，代码与本文档已同步（详见 git log）：
+
+| 位置 | 偏差 | 原因 |
+|---|---|---|
+| Task 3 `visible_replies` | 用 `dataclasses.replace` 返回 promoted 副本，不修改原对象 | 对象来自 TTL 缓存，避免标记泄漏 |
+| Task 4 错误码 | `or data.get("ok")` 兜底 | 过期 Cookie 返回 `ok:-100`，原计划代码会误判为限流 |
+| Task 4 `resolve_follow_gid` | 跳过非 dict 的 group 条目 | 畸形响应从 500 变为可读错误 |
+| Task 4 `TTLCache` | `time.monotonic()` + `pop` | 时钟回拨/并发过期安全 |
+| Task 5 `get_client` | 双检锁 + 捕获 `UnicodeDecodeError` | 并发首次请求、损坏 Cookie 文件映射为 401 |
+| Task 4/5/6 刷新 | `/api/feed?force=1` 绕过 10 分钟缓存 | 刷新按钮必须真正重新请求 |
+
+浏览器实测（2026-09-13）：真实数据下关注流渲染 24 条卡片；详情页评论为空（该帖评论者均未关注，过滤生效）；受控 stub 下验证了一级评论、楼中楼展开与"上下文已隐藏"孤儿标注。
