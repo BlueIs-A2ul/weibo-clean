@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from app import main
 from app.config import load_settings
 from app.models import Comment, Post, User
-from app.weibo_client import WeiboAuthError
+from app.weibo_client import WeiboAuthError, WeiboError, WeiboRateLimitError
 
 
 def u(uid: str, following: bool) -> User:
@@ -69,3 +69,31 @@ def test_auth_error_maps_to_401(monkeypatch):
     resp = TestClient(main.app, raise_server_exceptions=False).get("/api/feed")
     assert resp.status_code == 401
     assert "Cookie" in resp.json()["error"]
+
+
+def test_rate_limit_error_maps_to_429(monkeypatch):
+    def raise_rate_limit():
+        raise WeiboRateLimitError("请求过快")
+
+    monkeypatch.setattr(main, "get_client", raise_rate_limit)
+    resp = TestClient(main.app, raise_server_exceptions=False).get("/api/feed")
+    assert resp.status_code == 429
+    assert resp.json()["error"] == "请求过快"
+
+
+def test_weibo_error_maps_to_502(monkeypatch):
+    def raise_weibo_error():
+        raise WeiboError("接口结构异常")
+
+    monkeypatch.setattr(main, "get_client", raise_weibo_error)
+    resp = TestClient(main.app, raise_server_exceptions=False).get("/api/feed")
+    assert resp.status_code == 502
+    assert resp.json()["error"] == "接口结构异常"
+
+
+def test_get_client_caches_singleton(monkeypatch):
+    monkeypatch.setattr(main, "_client", None)
+    monkeypatch.setattr(main, "load_cookie", lambda settings: "SUB=test")
+    first = main.get_client()
+    second = main.get_client()
+    assert first is second
