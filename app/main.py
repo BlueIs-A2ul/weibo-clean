@@ -1,16 +1,25 @@
 import threading
 from pathlib import Path
+from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+import requests
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import load_cookie, load_settings
 from .filter_engine import filter_roots, is_visible, visible_posts, visible_replies
 from .models import Comment, Post, User
-from .weibo_client import WeiboAuthError, WeiboClient, WeiboError, WeiboRateLimitError
+from .weibo_client import (
+    USER_AGENT,
+    WeiboAuthError,
+    WeiboClient,
+    WeiboError,
+    WeiboRateLimitError,
+)
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+IMAGE_HOST_SUFFIX = ".sinaimg.cn"
 
 app = FastAPI(title="weibo-clean demo")
 _client: WeiboClient | None = None
@@ -33,17 +42,37 @@ def get_client() -> WeiboClient:
     return _client
 
 
+def is_allowed_image_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return (
+        parsed.scheme in ("http", "https")
+        and parsed.hostname is not None
+        and parsed.hostname.endswith(IMAGE_HOST_SUFFIX)
+    )
+
+
+def proxy_image_url(url: str) -> str:
+    if not url or not is_allowed_image_url(url):
+        return ""
+    return f"/api/image?url={quote(url, safe='')}"
+
+
 def user_view(user: User) -> dict:
-    return {"uid": user.uid, "name": user.screen_name, "avatar": user.avatar,
-            "following": user.following}
+    return {"uid": user.uid, "name": user.screen_name,
+            "avatar": proxy_image_url(user.avatar), "following": user.following}
 
 
 def post_view(post: Post) -> dict:
+    pics = []
+    for url in post.pics:
+        proxied = proxy_image_url(url)
+        if proxied:
+            pics.append(proxied)
     return {
         "mid": post.mid,
         "author": user_view(post.author),
         "text": post.text,
-        "pics": post.pics,
+        "pics": pics,
         "created_at": post.created_at,
         "reposts": post.reposts_count,
         "comments": post.comments_count,
@@ -111,6 +140,31 @@ def api_replies(root_cid: str, mid: str):
     post = client.fetch_status(mid)
     replies = client.fetch_replies(root_cid, mid, post.author.uid)
     return {"items": [comment_view(reply) for reply in visible_replies(replies)]}
+
+
+@app.get("/api/image")
+def api_image(url: str):
+    if not is_allowed_image_url(url):
+        raise HTTPException(status_code=400, detail="不支持的图片地址")
+    try:
+        upstream = requests.get(
+            url,
+            headers={"Referer": "https://weibo.com/", "User-Agent": USER_AGENT},
+            timeout=20.0,
+            stream=True,
+            allow_redirects=False,
+        )
+    except requests.RequestException as exc:
+        raise WeiboError(f"图片获取失败: {exc}") from exc
+    if upstream.status_code != 200:
+        upstream.close()
+        raise WeiboError(f"图片获取失败（{upstream.status_code}）")
+    media_type = upstream.headers.get("Content-Type") or "image/jpeg"
+    return StreamingResponse(
+        upstream.iter_content(65536),
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=600"},
+    )
 
 
 app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")

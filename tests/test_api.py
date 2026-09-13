@@ -6,8 +6,8 @@ from app.models import Comment, Post, User
 from app.weibo_client import WeiboAuthError, WeiboError, WeiboRateLimitError
 
 
-def u(uid: str, following: bool) -> User:
-    return User(uid=uid, screen_name=f"u{uid}", avatar="", following=following)
+def u(uid: str, following: bool, avatar: str = "") -> User:
+    return User(uid=uid, screen_name=f"u{uid}", avatar=avatar, following=following)
 
 
 class FakeClient:
@@ -15,7 +15,8 @@ class FakeClient:
 
     def fetch_feed(self, force=False):
         return [
-            Post(mid="1", author=u("a", True), text="hello"),
+            Post(mid="1", author=u("a", True, "https://tvax1.sinaimg.cn/a.jpg"),
+                 text="hello", pics=["https://wx2.sinaimg.cn/p.jpg"]),
             Post(mid="2", author=u("b", False), text="stranger"),
             Post(mid="3", author=u("c", True), text="ad", is_ad=True),
         ]
@@ -111,3 +112,43 @@ def test_feed_force_query_passes_through(monkeypatch):
     resp = TestClient(main.app, raise_server_exceptions=False).get("/api/feed?force=1")
     assert resp.status_code == 200
     assert recorded["force"] is True
+
+
+def test_feed_proxies_image_urls(monkeypatch):
+    resp = make_client(monkeypatch).get("/api/feed")
+    item = resp.json()["items"][0]
+    assert item["author"]["avatar"].startswith("/api/image?url=")
+    assert item["pics"][0].startswith("/api/image?url=")
+
+
+def test_image_proxy_rejects_foreign_hosts(monkeypatch):
+    resp = TestClient(main.app, raise_server_exceptions=False).get(
+        "/api/image", params={"url": "https://example.com/a.jpg"})
+    assert resp.status_code == 400
+
+
+def test_image_proxy_streams_upstream(monkeypatch):
+    captured = {}
+
+    class FakeUpstream:
+        status_code = 200
+        headers = {"Content-Type": "image/jpeg"}
+
+        def iter_content(self, size):
+            yield b"fake-image"
+
+        def close(self):
+            pass
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured["referer"] = kwargs["headers"]["Referer"]
+        return FakeUpstream()
+
+    monkeypatch.setattr(main.requests, "get", fake_get)
+    resp = TestClient(main.app, raise_server_exceptions=False).get(
+        "/api/image", params={"url": "https://tvax1.sinaimg.cn/a.jpg"})
+    assert resp.status_code == 200
+    assert resp.content == b"fake-image"
+    assert resp.headers["content-type"] == "image/jpeg"
+    assert captured["referer"] == "https://weibo.com/"

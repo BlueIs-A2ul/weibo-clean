@@ -1434,5 +1434,6 @@ git tag demo-v0.1.0
 | Task 4 `TTLCache` | `time.monotonic()` + `pop` | 时钟回拨/并发过期安全 |
 | Task 5 `get_client` | 双检锁 + 捕获 `UnicodeDecodeError` | 并发首次请求、损坏 Cookie 文件映射为 401 |
 | Task 4/5/6 刷新 | `/api/feed?force=1` 绕过 10 分钟缓存 | 刷新按钮必须真正重新请求 |
+| 图片加载 | 新增 `/api/image` 后端代理（白名单 `*.sinaimg.cn`，服务端带 weibo Referer 拉取） | 签名图床 URL 仅接受 weibo Referer，浏览器直连或 no-referrer 均 403 |
 
 浏览器实测（2026-09-13）：真实数据下关注流渲染 24 条卡片；详情页评论为空（该帖评论者均未关注，过滤生效）；受控 stub 下验证了一级评论、楼中楼展开与"上下文已隐藏"孤儿标注。
