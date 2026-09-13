@@ -1,36 +1,54 @@
-"""过滤引擎：输入原始模型，输出"只包含我关注的人"的视图。
+"""过滤引擎：输入原始模型，输出"只包含白名单成员"的视图。
 
-规则:
-- R2 一级评论/帖子：作者必须被关注
-- R4 回复：回复者与被回复者都必须被关注
-- 广告/推荐：isAd 或作者未被关注则丢弃
+生效白名单 = （关注 ∪ 手动添加） − 手动移除（白名单存储见 whitelist.py）。
+
+规则：
+- R2 一级评论/帖子：作者必须在白名单
+- R4 回复：回复者与被回复者都必须在白名单
+- 广告/推荐：isAd 丢弃；作者不在白名单也丢弃
 """
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
-from .models import Comment, Post
+from .models import Comment, Post, User
+from .whitelist import WhitelistStore
 
 
-def is_visible(comment: Comment) -> bool:
-    """仅适用于 Comment。target 为 None（一级评论）时只检查作者是否被关注。"""
-    if not comment.author.following:
+@dataclass(frozen=True)
+class WhitelistPolicy:
+    store: WhitelistStore
+
+    def allows(self, user: User | None) -> bool:
+        if user is None or not user.uid:
+            return False
+        if self.store.is_removed(user.uid):
+            return False
+        if user.following:
+            return True
+        return self.store.is_added(user.uid)
+
+
+def is_visible(comment: Comment, policy: WhitelistPolicy) -> bool:
+    """仅适用于 Comment。target 为 None（一级评论）时只检查作者。"""
+    if not policy.allows(comment.author):
         return False
-    if comment.target is not None and not comment.target.following:
+    if comment.target is not None and not policy.allows(comment.target):
         return False
     return True
 
 
-def filter_roots(roots: list[Comment]) -> list[Comment]:
-    return [root for root in roots if is_visible(root)]
+def filter_roots(roots: list[Comment], policy: WhitelistPolicy) -> list[Comment]:
+    return [root for root in roots if is_visible(root, policy)]
 
 
-def visible_replies(replies: list[Comment], promoted: bool = False) -> list[Comment]:
-    """返回可见回复。promoted=True 时返回标记了"上下文已隐藏"的副本（不修改原对象）。promoted=False 时返回原对象（调用方不得修改）。"""
-    kept = [reply for reply in replies if is_visible(reply)]
+def visible_replies(replies: list[Comment], policy: WhitelistPolicy,
+                    promoted: bool = False) -> list[Comment]:
+    """返回可见回复。promoted=True 时返回标记了"上下文已隐藏"的副本（不修改原对象）。"""
+    kept = [reply for reply in replies if is_visible(reply, policy)]
     if promoted:
         return [replace(reply, promoted=True) for reply in kept]
     return kept
 
 
-def visible_posts(posts: list[Post]) -> list[Post]:
-    return [post for post in posts if post.author.following and not post.is_ad]
+def visible_posts(posts: list[Post], policy: WhitelistPolicy) -> list[Post]:
+    return [post for post in posts if policy.allows(post.author) and not post.is_ad]
