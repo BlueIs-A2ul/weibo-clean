@@ -102,6 +102,21 @@ M0 实测（2026-09-13，关注 263 的账号，详见 `fixtures/m0-findings.md`
 - 转发的展示：卡片作者必须是关注的人；卡片内引用的原博与原作者照常显示（R3）。
 - 点赞：微博不公开"谁点了赞"，这部分天然没有可过滤的数据。
 
+## 6.5 Demo 运行说明（本地）
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+# 确保项目根目录存在 cookie.txt（从浏览器复制，格式同 weibo-follows）
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+- 电脑访问 `http://127.0.0.1:8000`；手机与电脑同一 Wi-Fi 时访问 `http://<电脑IP>:8000`。
+- 测试：`.venv\Scripts\python.exe -m pytest -v`
+- Demo 已知限制：只读；只加载关注流最新一页；评论只加载第一页、回复按楼懒加载；无数据库/PWA。
+
+实现计划见 `docs/superpowers/plans/2026-09-13-weibo-clean-demo.md`。
+
 ## 7. 里程碑
 
 | 阶段 | 内容 | 预估 |
