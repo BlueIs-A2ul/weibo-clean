@@ -129,3 +129,52 @@ def test_fetch_feed_force_bypasses_cache(monkeypatch):
     assert len(calls) == 2
     client.fetch_feed(force=True)
     assert len(calls) == 3
+
+
+def test_fetch_following_paginates_and_dedupes(monkeypatch):
+    page1 = {"ok": 1, "data": {"follows": {"users": [
+        {"idstr": "1", "screen_name": "A", "following": True},
+        {"idstr": "2", "screen_name": "B", "following": True}], "next_cursor": 50}}}
+    page2 = {"ok": 1, "data": {"follows": {"users": [
+        {"idstr": "2", "screen_name": "B", "following": True},
+        {"idstr": "3", "screen_name": "C", "following": True}], "next_cursor": 0}}}
+    client, calls = make_client(monkeypatch, [page1, page2])
+    users = client.fetch_following()
+    assert [u.uid for u in users] == ["1", "2", "3"]
+    assert calls[0][1]["page"] == 1 and calls[1][1]["page"] == 2
+    assert calls[0][1]["sortType"] == "all"
+    assert calls[0][0].endswith("/ajax/profile/followContent")
+
+
+def test_fetch_following_cached_between_calls(monkeypatch):
+    page1 = {"ok": 1, "data": {"follows": {"users": [
+        {"idstr": "1", "screen_name": "A", "following": True}], "next_cursor": 0}}}
+    client, calls = make_client(monkeypatch, [page1])
+    client.fetch_following()
+    client.fetch_following()
+    assert len(calls) == 1
+
+
+def test_fetch_user_parses_profile_info(monkeypatch):
+    data = {"ok": 1, "data": {"user": {
+        "idstr": "9", "screen_name": "Z", "profile_image_url": "http://img/z.jpg",
+        "following": False}}}
+    client, calls = make_client(monkeypatch, [data])
+    user = client.fetch_user("9")
+    assert user.uid == "9" and user.screen_name == "Z" and user.following is False
+    assert calls[0][0].endswith("/ajax/profile/info")
+
+
+def test_fetch_user_timeline_parses_caches_and_forces(monkeypatch):
+    data = {"ok": 1, "data": {"list": [
+        {"mid": "5", "user": {"idstr": "9", "following": False},
+         "text_raw": "hi", "created_at": "Sat Sep 13 20:00:00 +0800 2026"}]}}
+    client, calls = make_client(monkeypatch, [data, data])
+    posts = client.fetch_user_timeline("9")
+    assert posts[0].mid == "5" and posts[0].created_ts > 0
+    client.fetch_user_timeline("9")
+    assert len(calls) == 1
+    client.fetch_user_timeline("9", force=True)
+    assert len(calls) == 2
+    assert calls[0][0].endswith("/ajax/statuses/mymblog")
+    assert calls[0][1]["uid"] == "9" and calls[0][1]["feature"] == "0"

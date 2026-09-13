@@ -6,8 +6,8 @@ import requests
 
 from .cache import TTLCache
 from .config import Settings
-from .models import Comment, Post
-from .parsing import parse_post, parse_reply, parse_root_comment
+from .models import Comment, Post, User
+from .parsing import parse_post, parse_reply, parse_root_comment, parse_user
 
 BASE = "https://weibo.com"
 USER_AGENT = (
@@ -130,3 +130,43 @@ class WeiboClient:
             return [parse_reply(raw) for raw in data.get("data") or []]
 
         return self._cache.get_or_set(f"replies:{mid}:{root_cid}", load)
+
+    def fetch_following(self) -> list[User]:
+        def load() -> list[User]:
+            users: dict[str, User] = {}
+            page = 1
+            while page <= 30:
+                data = self._get("/ajax/profile/followContent",
+                                 {"sortType": "all", "page": page})
+                follows = (data.get("data") or {}).get("follows") or {}
+                batch = follows.get("users") or []
+                for raw in batch:
+                    if not isinstance(raw, dict):
+                        continue
+                    user = parse_user(raw)
+                    if user.uid:
+                        users.setdefault(user.uid, user)
+                next_cursor = str(follows.get("next_cursor") or "0")
+                if not batch or next_cursor in ("", "0"):
+                    break
+                page += 1
+            return list(users.values())
+
+        return self._cache.get_or_set("following", load)
+
+    def fetch_user(self, uid: str) -> User | None:
+        data = self._get("/ajax/profile/info", {"uid": uid})
+        raw = (data.get("data") or {}).get("user")
+        return parse_user(raw) if isinstance(raw, dict) else None
+
+    def fetch_user_timeline(self, uid: str, force: bool = False) -> list[Post]:
+        def load() -> list[Post]:
+            data = self._get("/ajax/statuses/mymblog",
+                             {"uid": uid, "page": "1", "feature": "0"})
+            raw_list = (data.get("data") or {}).get("list") or []
+            return [parse_post(raw) for raw in raw_list if isinstance(raw, dict)]
+
+        key = f"timeline:{uid}"
+        if force:
+            self._cache.delete(key)
+        return self._cache.get_or_set(key, load)
