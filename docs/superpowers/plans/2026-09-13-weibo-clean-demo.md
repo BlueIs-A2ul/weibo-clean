@@ -824,6 +824,7 @@ Expected: FAIL（`No module named 'app.main'`）。
 
 ```python
 from pathlib import Path
+import threading
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -838,19 +839,23 @@ WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
 app = FastAPI(title="weibo-clean demo")
 _client: WeiboClient | None = None
+_client_lock = threading.Lock()
 
 
 def get_client() -> WeiboClient:
     global _client
     if _client is None:
-        settings = load_settings()
-        try:
-            cookie = load_cookie(settings)
-        except OSError as exc:
-            raise WeiboAuthError(f"无法读取 Cookie 文件 {settings.cookie_file}：{exc}") from exc
-        if not cookie:
-            raise WeiboAuthError("Cookie 文件为空，请重新导入")
-        _client = WeiboClient(cookie, settings)
+        with _client_lock:
+            if _client is None:
+                settings = load_settings()
+                try:
+                    cookie = load_cookie(settings)
+                except (OSError, UnicodeDecodeError) as exc:
+                    raise WeiboAuthError(
+                        f"无法读取 Cookie 文件 {settings.cookie_file}：{exc}") from exc
+                if not cookie:
+                    raise WeiboAuthError("Cookie 文件为空，请重新导入")
+                _client = WeiboClient(cookie, settings)
     return _client
 
 
