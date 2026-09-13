@@ -562,13 +562,13 @@ class TTLCache:
         if item is None:
             return None
         expires_at, value = item
-        if time.time() > expires_at:
-            del self._items[key]
+        if time.monotonic() > expires_at:
+            self._items.pop(key, None)
             return None
         return value
 
     def set(self, key: str, value: Any) -> None:
-        self._items[key] = (time.time() + self._ttl, value)
+        self._items[key] = (time.monotonic() + self._ttl, value)
 
     def get_or_set(self, key: str, factory: Callable[[], Any]) -> Any:
         value = self.get(key)
@@ -649,7 +649,7 @@ class WeiboClient:
         if not isinstance(data, dict):
             raise WeiboError("接口返回结构异常")
         if data.get("ok") != 1:
-            code = data.get("errno") or data.get("code")
+            code = data.get("errno") or data.get("code") or data.get("ok")
             if code in (-100, 100003, "100003"):
                 raise WeiboAuthError("Cookie 已失效，请更新 cookie.txt 后重试")
             raise WeiboRateLimitError(f"接口拒绝请求（code={code}），请稍后再试")
@@ -672,7 +672,9 @@ class WeiboClient:
             return self._follow_gid
         data = self.fetch_all_groups()
         for group in data.get("groups") or []:
-            for item in (group or {}).get("group") or []:
+            if not isinstance(group, dict):
+                continue
+            for item in group.get("group") or []:
                 if isinstance(item, dict) and item.get("title") == "全部关注" and item.get("gid"):
                     self._follow_gid = str(item["gid"])
                     return self._follow_gid
