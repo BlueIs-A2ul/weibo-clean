@@ -248,8 +248,8 @@ def main():
     p.get("w_feed_following", f"{W}/ajax/feed/following", f"{W}/",
           params={"list_id": "1000", "refresh": "1", "since_id": "0", "count": "10"})
     p.get("w_feed_friendstimeline", f"{W}/ajax/feed/friendstimeline", f"{W}/",
-          params={"list_id": "110011234567890", "refresh": "4", "since_id": "0",
-                  "count": "25", "fid": "110011234567890"})
+          params={"list_id": "110012345678901", "refresh": "4", "since_id": "0",
+                  "count": "25", "fid": "110012345678901"})
 
     # 选取测试帖子
     mid = None

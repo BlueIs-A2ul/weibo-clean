@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 LIVE = Path(r"D:\desktop\weibo-clean\fixtures\live")
-TARGET = "110011234567890"
+TARGET = "110012345678901"
 
 
 def main():

@@ -491,10 +491,10 @@ def make_client(monkeypatch, responses):
 
 def test_resolve_follow_gid_from_all_groups(monkeypatch):
     groups = {"ok": 1, "groups": [{"title": "默认分组", "group": [
-        {"title": "全部关注", "gid": "100011234567890"},
-        {"title": "原创", "gid": "110011234567890"}]}]}
+        {"title": "全部关注", "gid": "100012345678901"},
+        {"title": "原创", "gid": "110012345678901"}]}]}
     client, _ = make_client(monkeypatch, [groups])
-    assert client.resolve_follow_gid() == "100011234567890"
+    assert client.resolve_follow_gid() == "100012345678901"
 
 
 def test_auth_error_raised_on_minus_100(monkeypatch):

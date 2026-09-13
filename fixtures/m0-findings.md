@@ -26,7 +26,7 @@ GET https://weibo.com/ajax/feed/friendstimeline
     ?list_id={gid}&fid={gid}&refresh=4&since_id=0&count=25
 ```
 
-- `gid` 从 `GET /ajax/feed/allGroups` 中取 `title=全部关注` 的分组（本账号 `100011234567890`，type=1）。
+- `gid` 从 `GET /ajax/feed/allGroups` 中取 `title=全部关注` 的分组（本账号 `100012345678901`，type=1）。
 - 响应：`statuses[]`、`total_number`（本账号 2000）、`since_id/max_id` 翻页游标。
 - 实测：单页 24 条，其中 4 条转发（含 `retweeted_status`）；作者 `user.following` 全为 true；帖子自带 `isAd`，用户 status 里有 `ad_marked`，可用于广告过滤。
 - 注意：`/ajax/feed/following` 不存在（404）；不要硬编码 gid，运行时从 allGroups 解析。
