@@ -120,3 +120,14 @@ GET https://weibo.com/ajax/feed/allGroups
 - 列表首条可能是置顶帖（`isTop: 1`，日期较旧），合并进信息流后按时间倒序自然下沉，无需特殊处理。
 - 帖子自带 `isAd`；`user.following` 对未关注作者为 `false`（白名单判定依赖 added 集合）。
 - 客户端实现采用 `feature=0`（与 friendstimeline 一致，含转发）。
+
+## 勘误：buildComments 的 following 字段不可信（2026-09-13 晚）
+
+白名单版本上线后用户反馈"看不到关注的人在帖子下的评论"，排查结论：
+
+- `buildComments`（一级 `fetch_level=0` 与楼中楼 `fetch_level=1`）返回的 `user.following` **恒为 false**；
+- 反证：uid `4444444444`、`5555555555` 经 `profile/info` 与实时 followContent 集合双重确认**已关注**，评论里 `following=false`；博主本人给自己帖子的评论也是 false；
+- 换 `uid` 参数（帖子作者 / 登录者）、`is_mix`、`is_show_bulletin`、`max_id`、`is_reload` 均不改变该行为；
+- 此前 V5 的"评论 following 与关注集合交叉验证一致"结论错误：当时评论样本恰好没有已关注用户（0/4、0/3 全 false 被误读为"路人"）；关注流的 following=true 不能作为反证（作者本就都关注）。
+- **结论**：评论可见性必须用本地关注集合（followContent，254/263）判定，不能用评论接口的 `following`。
+- 另实测：根评论与楼中楼均支持 `max_id` 翻页（每页实际 2~5 条），客户端已改为最多抓 3 页。

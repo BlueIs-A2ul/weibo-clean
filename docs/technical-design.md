@@ -91,7 +91,9 @@ is_reload=1&id={根评论id}&...&fetch_level=1&locale=zh-CN
 单条兜底：GET https://weibo.com/ajax/profile/info?uid={uid} → data.user.following
 ```
 
-实测交叉验证：关注用户 profile=true 且在关注集合内；评论者 profile=false 且不在集合内，与评论数据 `following` 一致。
+- 注意：`following` 字段**仅信息流/用户主页数据可信**；`buildComments`（一级评论与楼中楼）返回的 `following` 恒为 `false`（已关注用户也如此，实测见 `fixtures/m0-findings.md` 勘误），评论可见性判定必须使用本地关注集合。
+- 实测交叉验证：关注用户 profile/info=true 且在实时 followContent 集合内；关注用户的评论对象 following=false（字段不可信的直接证据）。
+- 评论翻页：根评论与楼中楼均支持 `max_id`，每页实际返回 2~5 条，客户端最多抓 3 页。
 
 ### 2.6 登录者身份
 
