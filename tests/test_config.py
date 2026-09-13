@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.config import load_settings
 
 
@@ -11,3 +13,7 @@ def test_delays_env_override(monkeypatch):
 
 def test_following_cache_ttl_default():
     assert load_settings().following_cache_ttl == 1800.0
+
+
+def test_following_cache_file_default():
+    assert load_settings().following_cache_file == Path("following_cache.json")

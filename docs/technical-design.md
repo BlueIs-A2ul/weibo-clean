@@ -83,6 +83,7 @@ is_reload=1&id={根评论id}&...&fetch_level=1&locale=zh-CN
 - friendships：20/页；实测可达第 14 页（258/263），未复现旧的约 200 条硬上限；后段页面 `has_filtered_attentions=true`。
 - 少量用户被平台过滤无法枚举（差 5~9 属正常），UI 不提示，仅日志记录。
 - 同步策略：优先 followContent 全量；与 friendships 结果取并集后写库；同步后与 `total_number` 校验。
+- Demo 实现：followContent 结果写入本地 `following_cache.json`（30 分钟 TTL）；进程启动/重启直接读本地，过期后由后台线程静默刷新，避免每 10 分钟在请求路径上重新拉 6 页。
 
 ### 2.5 单条关系判断【已验证】
 

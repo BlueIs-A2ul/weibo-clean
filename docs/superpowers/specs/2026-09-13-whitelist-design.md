@@ -67,7 +67,7 @@
 ## 5. 关注列表（仅管理页用）
 
 - `WeiboClient.fetch_following()`：`GET /ajax/profile/followContent?sortType=all&page=N`（50/页），按 `data.next_cursor`（实为 offset）翻页直至用户列表为空 / 游标不前进 / 上限 30 页保险；按 uid 去重后返回 `list[User]`。
-- 缓存键 `following`，沿用 `TTLCache`（600 秒）。冷启动约 6 页、限速下约 10 秒，管理页需 loading 态。
+- 缓存键 `following`，沿用 `TTLCache`（v0.2.4 起 1800 秒）并持久化到本地 `following_cache.json`：启动即读本地、过期后台刷新，避免阻塞评论首屏。
 - 管理页"关注中"列表 = `fetch_following()` 结果中 `uid ∉ removed` 的条目；"已隐藏"直接取 `store.removed_entries()`。
 
 ## 6. 手动添加者的个人时间线

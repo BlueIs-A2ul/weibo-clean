@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,24 @@ from app.weibo_client import WeiboAuthError, WeiboClient, WeiboError, WeiboRateL
 SETTINGS = Settings(cookie_file=Path("unused"), request_min_delay=0, request_max_delay=0)
 
 
+def fail_get(*args, **kwargs):
+    raise AssertionError("network should not be used")
+
+
+def disk_settings(tmp_path, refresh_in_background=False):
+    return Settings(cookie_file=Path("unused"), request_min_delay=0, request_max_delay=0,
+                    following_cache_file=tmp_path / "following.json",
+                    refresh_in_background=refresh_in_background)
+
+
+def write_following_cache(path, uid, saved_at):
+    path.write_text(json.dumps({
+        "version": 1, "saved_at": saved_at.isoformat(),
+        "users": [{"idstr": uid, "screen_name": f"u{uid}", "profile_image_url": "",
+                   "following": True}],
+    }, ensure_ascii=False), encoding="utf-8")
+
+
 class FakeResponse:
     def __init__(self, payload, status_code=200):
         self._payload = payload
@@ -21,8 +40,8 @@ class FakeResponse:
         return self._payload
 
 
-def make_client(monkeypatch, responses):
-    client = WeiboClient("SUB=test", SETTINGS)
+def make_client(monkeypatch, responses, settings=SETTINGS):
+    client = WeiboClient("SUB=test", settings)
     calls = []
 
     def fake_get(url, params=None, headers=None, timeout=None):
@@ -235,3 +254,65 @@ def test_fetch_self_uid_raises_without_uid(monkeypatch):
                         lambda url, headers=None, timeout=None: NoUidResponse())
     with pytest.raises(WeiboError):
         client.fetch_self_uid()
+
+
+def test_fetch_following_uses_disk_cache_without_network(tmp_path, monkeypatch):
+    settings = disk_settings(tmp_path)
+    write_following_cache(settings.following_cache_file, "1", datetime.now(timezone.utc))
+    client = WeiboClient("SUB=test", settings)
+    monkeypatch.setattr(client._session, "get", fail_get)
+    users = client.fetch_following()
+    assert [u.uid for u in users] == ["1"]
+
+
+def test_fetch_following_persists_and_reuses_disk(tmp_path, monkeypatch):
+    settings = disk_settings(tmp_path)
+    page1 = {"ok": 1, "data": {"follows": {"users": [
+        {"idstr": "1", "screen_name": "A", "following": True}], "next_cursor": 0}}}
+    client, calls = make_client(monkeypatch, [page1], settings)
+    assert [u.uid for u in client.fetch_following()] == ["1"]
+    assert len(calls) == 1
+    payload = json.loads(settings.following_cache_file.read_text(encoding="utf-8"))
+    assert payload["users"][0]["idstr"] == "1" and payload["saved_at"]
+
+    second = WeiboClient("SUB=test", settings)
+    monkeypatch.setattr(second._session, "get", fail_get)
+    assert [u.uid for u in second.fetch_following()] == ["1"]
+
+
+def test_stale_disk_cache_triggers_background_refresh(tmp_path, monkeypatch):
+    settings = disk_settings(tmp_path, refresh_in_background=True)
+    write_following_cache(settings.following_cache_file, "1",
+                          datetime.now(timezone.utc) - timedelta(hours=2))
+    client = WeiboClient("SUB=test", settings)
+    page1 = {"ok": 1, "data": {"follows": {"users": [
+        {"idstr": "2", "screen_name": "B", "following": True}], "next_cursor": 0}}}
+
+    class InlineThread:
+        def __init__(self, target, daemon=False):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    monkeypatch.setattr(weibo_client.threading, "Thread", InlineThread)
+    monkeypatch.setattr(weibo_client.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(client._session, "get",
+                        lambda url, params=None, headers=None, timeout=None:
+                        FakeResponse(page1))
+
+    users = client.fetch_following()
+    assert [u.uid for u in users] == ["1"]
+    assert [u.uid for u in client.fetch_following()] == ["2"]
+    payload = json.loads(settings.following_cache_file.read_text(encoding="utf-8"))
+    assert payload["users"][0]["idstr"] == "2"
+
+
+def test_corrupt_following_cache_falls_back_to_network(tmp_path, monkeypatch):
+    settings = disk_settings(tmp_path)
+    settings.following_cache_file.write_text("{oops", encoding="utf-8")
+    page1 = {"ok": 1, "data": {"follows": {"users": [
+        {"idstr": "1", "screen_name": "A", "following": True}], "next_cursor": 0}}}
+    client, calls = make_client(monkeypatch, [page1], settings)
+    assert [u.uid for u in client.fetch_following()] == ["1"]
+    assert len(calls) == 1

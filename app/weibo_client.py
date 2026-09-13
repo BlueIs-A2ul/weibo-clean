@@ -1,6 +1,10 @@
+import json
+import os
 import random
 import re
+import threading
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -37,6 +41,8 @@ class WeiboClient:
         self._session = requests.Session()
         self._cache = TTLCache(settings.cache_ttl_seconds)
         self._following_cache = TTLCache(settings.following_cache_ttl)
+        self._following_lock = threading.Lock()
+        self._following_refreshing = False
         self._follow_gid: str | None = None
 
     @property
@@ -148,27 +154,104 @@ class WeiboClient:
         return self._cache.get_or_set(f"replies:{mid}:{root_cid}", load)
 
     def fetch_following(self) -> list[User]:
-        def load() -> list[User]:
-            users: dict[str, User] = {}
-            page = 1
-            while page <= 30:
-                data = self._get("/ajax/profile/followContent",
-                                 {"sortType": "all", "page": page})
-                follows = (data.get("data") or {}).get("follows") or {}
-                batch = follows.get("users") or []
-                for raw in batch:
-                    if not isinstance(raw, dict):
-                        continue
-                    user = parse_user(raw)
-                    if user.uid:
-                        users.setdefault(user.uid, user)
-                next_cursor = str(follows.get("next_cursor") or "0")
-                if not batch or next_cursor in ("", "0"):
-                    break
-                page += 1
-            return list(users.values())
+        cached = self._following_cache.get("following")
+        if cached is not None:
+            return cached
+        with self._following_lock:
+            cached = self._following_cache.get("following")
+            if cached is not None:
+                return cached
+            from_disk = self._load_following_cache()
+            if from_disk is not None:
+                users, saved_at = from_disk
+                self._following_cache.set("following", users)
+                if self._is_stale(saved_at):
+                    self._schedule_following_refresh()
+                return users
+            return self.refresh_following()
 
-        return self._following_cache.get_or_set("following", load)
+    def refresh_following(self) -> list[User]:
+        users = self._load_following_from_network()
+        self._following_cache.set("following", users)
+        self._save_following_cache(users)
+        return users
+
+    def _load_following_from_network(self) -> list[User]:
+        users: dict[str, User] = {}
+        page = 1
+        while page <= 30:
+            data = self._get("/ajax/profile/followContent",
+                             {"sortType": "all", "page": page})
+            follows = (data.get("data") or {}).get("follows") or {}
+            batch = follows.get("users") or []
+            for raw in batch:
+                if not isinstance(raw, dict):
+                    continue
+                user = parse_user(raw)
+                if user.uid:
+                    users.setdefault(user.uid, user)
+            next_cursor = str(follows.get("next_cursor") or "0")
+            if not batch or next_cursor in ("", "0"):
+                break
+            page += 1
+        return list(users.values())
+
+    def _schedule_following_refresh(self) -> None:
+        if not self._settings.refresh_in_background or self._following_refreshing:
+            return
+        self._following_refreshing = True
+        threading.Thread(target=self._background_refresh_following, daemon=True).start()
+
+    def _background_refresh_following(self) -> None:
+        try:
+            self.refresh_following()
+        except WeiboError:
+            pass
+        finally:
+            self._following_refreshing = False
+
+    def _load_following_cache(self) -> tuple[list[User], datetime] | None:
+        path = self._settings.following_cache_file
+        if path is None or not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return None
+            users = [parse_user(raw) for raw in data.get("users") or []
+                     if isinstance(raw, dict)]
+            users = [user for user in users if user.uid]
+            if not users:
+                return None
+            saved_at = datetime.fromisoformat(str(data.get("saved_at") or ""))
+            if saved_at.tzinfo is None:
+                saved_at = saved_at.replace(tzinfo=timezone.utc)
+            return users, saved_at
+        except (OSError, ValueError):
+            return None
+
+    def _save_following_cache(self, users: list[User]) -> None:
+        path = self._settings.following_cache_file
+        if path is None:
+            return
+        payload = {
+            "version": 1,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "users": [{"idstr": user.uid, "screen_name": user.screen_name,
+                       "profile_image_url": user.avatar, "following": user.following}
+                      for user in users],
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = path.parent / (path.name + ".tmp")
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp_path, path)
+        except OSError:
+            pass
+
+    def _is_stale(self, saved_at: datetime) -> bool:
+        age = (datetime.now(timezone.utc) - saved_at).total_seconds()
+        return age > self._settings.following_cache_ttl
 
     def fetch_user(self, uid: str) -> User | None:
         data = self._get("/ajax/profile/info", {"uid": uid})
