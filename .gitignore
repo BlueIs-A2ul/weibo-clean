@@ -1,5 +1,6 @@
 # secrets
 cookie.txt
+whitelist.json
 
 # raw captured data (contains personal info, do not publish)
 fixtures/live/

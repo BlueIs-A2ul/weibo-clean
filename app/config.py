@@ -6,6 +6,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Settings:
     cookie_file: Path
+    whitelist_file: Path = Path("whitelist.json")
     request_min_delay: float = 1.0
     request_max_delay: float = 2.5
     request_timeout: float = 20.0
@@ -14,7 +15,10 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    return Settings(cookie_file=Path(os.environ.get("WEIBO_COOKIE_FILE", "cookie.txt")))
+    return Settings(
+        cookie_file=Path(os.environ.get("WEIBO_COOKIE_FILE", "cookie.txt")),
+        whitelist_file=Path(os.environ.get("WEIBO_WHITELIST_FILE", "whitelist.json")),
+    )
 
 
 def load_cookie(settings: Settings) -> str:
