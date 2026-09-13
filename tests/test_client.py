@@ -116,3 +116,16 @@ def test_fetch_root_comments_params_and_parsing(monkeypatch):
     assert comments[0].cid == "555" and comments[0].total_replies == 2
     assert calls[0][1]["fetch_level"] == "0"
     assert calls[0][1]["uid"] == "7" and calls[0][1]["count"] == "20"
+
+
+def test_fetch_feed_force_bypasses_cache(monkeypatch):
+    groups = {"ok": 1, "groups": [{"group": [{"title": "全部关注", "gid": "1"}]}]}
+    feed = {"ok": 1, "statuses": [
+        {"mid": "1", "user": {"idstr": "7", "following": True},
+         "text_raw": "x", "pic_ids": []}]}
+    client, calls = make_client(monkeypatch, [groups, feed, feed])
+    client.fetch_feed()
+    client.fetch_feed()
+    assert len(calls) == 2
+    client.fetch_feed(force=True)
+    assert len(calls) == 3

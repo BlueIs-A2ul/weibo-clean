@@ -13,7 +13,7 @@ def u(uid: str, following: bool) -> User:
 class FakeClient:
     settings = load_settings()
 
-    def fetch_feed(self):
+    def fetch_feed(self, force=False):
         return [
             Post(mid="1", author=u("a", True), text="hello"),
             Post(mid="2", author=u("b", False), text="stranger"),
@@ -97,3 +97,17 @@ def test_get_client_caches_singleton(monkeypatch):
     first = main.get_client()
     second = main.get_client()
     assert first is second
+
+
+def test_feed_force_query_passes_through(monkeypatch):
+    recorded = {}
+
+    class RecordingClient(FakeClient):
+        def fetch_feed(self, force=False):
+            recorded["force"] = force
+            return super().fetch_feed()
+
+    monkeypatch.setattr(main, "get_client", lambda: RecordingClient())
+    resp = TestClient(main.app, raise_server_exceptions=False).get("/api/feed?force=1")
+    assert resp.status_code == 200
+    assert recorded["force"] is True

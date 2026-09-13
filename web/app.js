@@ -75,12 +75,12 @@ function commentBody(comment) {
   return box;
 }
 
-async function loadFeed() {
+async function loadFeed(force = false) {
   hideBanner();
   const feed = $("#feed");
   feed.innerHTML = '<div class="loading">加载中…</div>';
   try {
-    const data = await api("/api/feed");
+    const data = await api(force ? "/api/feed?force=1" : "/api/feed");
     feed.innerHTML = "";
     if (!data.items.length) feed.innerHTML = '<div class="loading">没有可显示的内容</div>';
     for (const post of data.items) feed.append(postCard(post, () => openDetail(post.mid)));
@@ -161,6 +161,6 @@ async function expandReplies(rootCid, container, button) {
   }
 }
 
-$("#refresh-btn").addEventListener("click", loadFeed);
+$("#refresh-btn").addEventListener("click", () => loadFeed(true));
 $("#back-btn").addEventListener("click", () => setView("feed"));
 loadFeed();

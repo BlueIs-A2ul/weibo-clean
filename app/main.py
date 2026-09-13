@@ -80,8 +80,8 @@ def weibo_error_handler(request: Request, exc: WeiboError):
 
 
 @app.get("/api/feed")
-def api_feed():
-    posts = get_client().fetch_feed()
+def api_feed(force: bool = False):
+    posts = get_client().fetch_feed(force=force)
     return {"items": [post_view(post) for post in visible_posts(posts)]}
 
 

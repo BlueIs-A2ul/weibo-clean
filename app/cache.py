@@ -20,6 +20,9 @@ class TTLCache:
     def set(self, key: str, value: Any) -> None:
         self._items[key] = (time.monotonic() + self._ttl, value)
 
+    def delete(self, key: str) -> None:
+        self._items.pop(key, None)
+
     def get_or_set(self, key: str, factory: Callable[[], Any]) -> Any:
         value = self.get(key)
         if value is None:
