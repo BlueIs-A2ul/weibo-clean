@@ -69,3 +69,29 @@ def test_parse_reply_reads_target_user():
     assert reply.cid == "666" and reply.root_cid == "555"
     assert reply.target is not None
     assert reply.target.uid == "2" and reply.target.following is False
+
+
+def test_parse_user_defaults_to_not_following():
+    user = parse_user({})
+    assert user.uid == "" and user.following is False
+
+
+def test_parse_user_falls_back_to_id():
+    assert parse_user({"id": 42}).uid == "42"
+
+
+def test_parse_post_without_pics():
+    post = parse_post({"mid": "1", "user": {"idstr": "1"}})
+    assert post.pics == [] and post.retweeted is None
+
+
+def test_parse_post_pics_fall_back_to_bmiddle():
+    raw = {"mid": "1", "user": {"idstr": "1"}, "pic_ids": ["p1", "missing"],
+           "pic_infos": {"p1": {"bmiddle": {"url": "http://img/mid.jpg"}}}}
+    assert parse_post(raw).pics == ["http://img/mid.jpg"]
+
+
+def test_parse_reply_without_reply_comment_has_no_target():
+    reply = parse_reply({"id": "1", "rootid": "9",
+                         "user": {"idstr": "1", "following": True}})
+    assert reply.target is None and reply.root_cid == "9"
