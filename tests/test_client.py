@@ -178,3 +178,27 @@ def test_fetch_user_timeline_parses_caches_and_forces(monkeypatch):
     assert len(calls) == 2
     assert calls[0][0].endswith("/ajax/statuses/mymblog")
     assert calls[0][1]["uid"] == "9" and calls[0][1]["feature"] == "0"
+
+
+def test_fetch_root_comments_paginates_until_cursor_end(monkeypatch):
+    page1 = {"ok": 1, "data": [{"id": "1", "user": {"idstr": "1"}}], "max_id": 100}
+    page2 = {"ok": 1, "data": [{"id": "2", "user": {"idstr": "2"}}], "max_id": 0}
+    client, calls = make_client(monkeypatch, [page1, page2])
+    comments = client.fetch_root_comments("100", "7")
+    assert [c.cid for c in comments] == ["1", "2"]
+    assert len(calls) == 2
+    assert calls[0][1]["max_id"] == "0"
+    assert calls[1][1]["max_id"] == "100"
+    assert calls[1][1]["fetch_level"] == "0"
+
+
+def test_fetch_replies_paginates(monkeypatch):
+    page1 = {"ok": 1, "data": [{"id": "a", "rootid": "9", "user": {"idstr": "1"}}],
+             "max_id": "55"}
+    page2 = {"ok": 1, "data": [{"id": "b", "rootid": "9", "user": {"idstr": "2"}}],
+             "max_id": 0}
+    client, calls = make_client(monkeypatch, [page1, page2])
+    replies = client.fetch_replies("9", "100", "7")
+    assert [c.cid for c in replies] == ["a", "b"]
+    assert calls[1][1]["id"] == "9" and calls[1][1]["fetch_level"] == "1"
+    assert calls[1][1]["max_id"] == "55"

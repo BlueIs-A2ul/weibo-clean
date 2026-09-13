@@ -119,6 +119,12 @@ def entry_view(entry: WhitelistEntry) -> dict:
             "avatar": proxy_image_url(entry.avatar), "at": entry.at}
 
 
+def policy_with_following(client: WeiboClient) -> WhitelistPolicy:
+    """评论接口的 user.following 字段不可信（恒为 false），需用本地关注集合判定。"""
+    following = frozenset(user.uid for user in client.fetch_following())
+    return WhitelistPolicy(get_store(), following)
+
+
 class AddBody(BaseModel):
     input: str
 
@@ -183,7 +189,7 @@ def api_status(mid: str):
 @app.get("/api/status/{mid}/comments")
 def api_comments(mid: str):
     client = get_client()
-    policy = WhitelistPolicy(get_store())
+    policy = policy_with_following(client)
     post = client.fetch_status(mid)
     roots = client.fetch_root_comments(mid, post.author.uid)
     threads = [comment_view(root) for root in filter_roots(roots, policy)]
@@ -200,7 +206,7 @@ def api_comments(mid: str):
 @app.get("/api/comment/{root_cid}/replies")
 def api_replies(root_cid: str, mid: str):
     client = get_client()
-    policy = WhitelistPolicy(get_store())
+    policy = policy_with_following(client)
     post = client.fetch_status(mid)
     replies = client.fetch_replies(root_cid, mid, post.author.uid)
     return {"items": [comment_view(reply) for reply in visible_replies(replies, policy)]}

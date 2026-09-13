@@ -12,6 +12,7 @@ class Settings:
     request_timeout: float = 20.0
     cache_ttl_seconds: float = 600.0
     max_orphan_threads: int = 3
+    max_comment_pages: int = 3
 
 
 def load_settings() -> Settings:

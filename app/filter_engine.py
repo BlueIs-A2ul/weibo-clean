@@ -17,15 +17,19 @@ from .whitelist import WhitelistStore
 @dataclass(frozen=True)
 class WhitelistPolicy:
     store: WhitelistStore
+    following_uids: frozenset[str] | None = None
 
     def allows(self, user: User | None) -> bool:
         if user is None or not user.uid:
             return False
-        if self.store.is_removed(user.uid):
+        uid = user.uid
+        if self.store.is_removed(uid):
             return False
         if user.following:
             return True
-        return self.store.is_added(user.uid)
+        if self.store.is_added(uid):
+            return True
+        return self.following_uids is not None and uid in self.following_uids
 
 
 def is_visible(comment: Comment, policy: WhitelistPolicy) -> bool:

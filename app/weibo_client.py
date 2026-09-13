@@ -115,19 +115,32 @@ class WeiboClient:
 
         return self._cache.get_or_set(f"status:{mid}", load)
 
+    def _comment_pages(self, extra: dict[str, str], author_uid: str, parser) -> list[Comment]:
+        comments: list[Comment] = []
+        max_id = "0"
+        for _ in range(self._settings.max_comment_pages):
+            params = self._comment_params(
+                dict(extra, max_id=max_id, max_id_type="0"), author_uid)
+            data = self._get("/ajax/statuses/buildComments", params)
+            batch = data.get("data") or []
+            comments.extend(parser(raw) for raw in batch if isinstance(raw, dict))
+            next_id = str(data.get("max_id") or "0")
+            if not batch or next_id in ("", "0") or next_id == max_id:
+                break
+            max_id = next_id
+        return comments
+
     def fetch_root_comments(self, mid: str, author_uid: str) -> list[Comment]:
         def load() -> list[Comment]:
-            data = self._get("/ajax/statuses/buildComments",
-                             self._comment_params({"id": mid, "fetch_level": "0"}, author_uid))
-            return [parse_root_comment(raw) for raw in data.get("data") or []]
+            return self._comment_pages({"id": mid, "fetch_level": "0"},
+                                       author_uid, parse_root_comment)
 
         return self._cache.get_or_set(f"comments:{mid}", load)
 
     def fetch_replies(self, root_cid: str, mid: str, author_uid: str) -> list[Comment]:
         def load() -> list[Comment]:
-            data = self._get("/ajax/statuses/buildComments",
-                             self._comment_params({"id": root_cid, "fetch_level": "1"}, author_uid))
-            return [parse_reply(raw) for raw in data.get("data") or []]
+            return self._comment_pages({"id": root_cid, "fetch_level": "1"},
+                                       author_uid, parse_reply)
 
         return self._cache.get_or_set(f"replies:{mid}:{root_cid}", load)
 

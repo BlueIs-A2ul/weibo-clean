@@ -30,13 +30,14 @@ def post(mid: str, uid: str, following: bool, is_ad: bool = False) -> Post:
     return Post(mid=mid, author=user(uid, following), text="", is_ad=is_ad)
 
 
-def make_policy(tmp_path, added=(), removed=()) -> WhitelistPolicy:
+def make_policy(tmp_path, added=(), removed=(), following_uids=None) -> WhitelistPolicy:
     store = WhitelistStore(tmp_path / "whitelist.json")
     for uid in added:
         store.add(WhitelistEntry(uid=uid, name=f"u{uid}"))
     for uid in removed:
         store.hide(WhitelistEntry(uid=uid, name=f"u{uid}"))
-    return WhitelistPolicy(store)
+    known = frozenset(following_uids) if following_uids is not None else None
+    return WhitelistPolicy(store, known)
 
 
 def test_unfollowed_root_is_hidden(tmp_path):
@@ -117,3 +118,25 @@ def test_plain_visible_replies_return_originals(tmp_path):
     policy = make_policy(tmp_path)
     original = reply("10", True, True)
     assert visible_replies([original], policy)[0] is original
+
+
+def test_following_set_allows_user_with_false_flag(tmp_path):
+    policy = make_policy(tmp_path, following_uids={"x"})
+    assert is_visible(root("x", following=False), policy) is True
+
+
+def test_removed_overrides_following_set(tmp_path):
+    policy = make_policy(tmp_path, removed={"x"}, following_uids={"x"})
+    assert is_visible(root("x", following=False), policy) is False
+
+
+def test_reply_pair_resolved_via_following_set(tmp_path):
+    policy = make_policy(tmp_path, following_uids={"x", "y"})
+    comment = Comment(cid="10", author=user("x", False), text="",
+                      target=user("y", False))
+    assert [c.cid for c in visible_replies([comment], policy)] == ["10"]
+
+
+def test_unknown_flag_false_without_set_stays_hidden(tmp_path):
+    policy = make_policy(tmp_path)
+    assert is_visible(root("x", following=False), policy) is False

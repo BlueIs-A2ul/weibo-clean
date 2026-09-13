@@ -29,14 +29,20 @@ class FakeClient:
         return [
             Comment(cid="10", author=u("a", True), text="visible root", total_replies=1),
             Comment(cid="11", author=u("x", False), text="hidden root", total_replies=2),
+            Comment(cid="12", author=u("d", False), text="followed but flag false",
+                    total_replies=0),
         ]
 
     def fetch_replies(self, root_cid, mid, author_uid):
         if root_cid == "11":
             return [Comment(cid="21", author=u("b", True), text="orphan",
                             target=u("c", True))]
-        return [Comment(cid="20", author=u("b", True), text="reply",
-                        target=u("c", False))]
+        return [
+            Comment(cid="20", author=u("b", True), text="reply",
+                    target=u("c", False)),
+            Comment(cid="22", author=u("b", True), text="reply to stranger",
+                    target=u("q", False)),
+        ]
 
     def fetch_following(self):
         return [u("a", True), u("c", True), u("d", True), u("z", False)]
@@ -85,14 +91,14 @@ def test_added_user_hidden_when_removed(monkeypatch, tmp_path):
 def test_comments_returns_threads_and_promoted_orphans(monkeypatch, tmp_path):
     resp = make_client(monkeypatch, tmp_path).get("/api/status/100/comments")
     body = resp.json()
-    assert [t["cid"] for t in body["threads"]] == ["10"]
+    assert [t["cid"] for t in body["threads"]] == ["10", "12"]
     assert [o["cid"] for o in body["orphans"]] == ["21"]
     assert body["orphans"][0]["promoted"] is True
 
 
 def test_replies_endpoint_filters_pair_rule(monkeypatch, tmp_path):
     resp = make_client(monkeypatch, tmp_path).get("/api/comment/10/replies?mid=100")
-    assert resp.json()["items"] == []
+    assert [item["cid"] for item in resp.json()["items"]] == ["20"]
 
 
 def test_whitelist_add_parses_uid_and_stores(monkeypatch, tmp_path):
