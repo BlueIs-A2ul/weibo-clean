@@ -1,0 +1,19 @@
+# secrets
+cookie.txt
+
+# raw captured data (contains personal info, do not publish)
+fixtures/live/
+fixtures/*.json
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# editor / os
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
