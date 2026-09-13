@@ -28,7 +28,6 @@ from .whitelist import WhitelistEntry, WhitelistError, WhitelistStore, parse_uid
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 IMAGE_HOST_SUFFIX = ".sinaimg.cn"
-FEED_LIMIT = 60
 
 app = FastAPI(title="weibo-clean demo")
 _client: WeiboClient | None = None
@@ -167,26 +166,28 @@ def merge_posts(groups: list[list[Post]]) -> list[Post]:
     for group in groups:
         for post in group:
             unique.setdefault(post.mid, post)
-    ordered = sorted(unique.values(), key=lambda post: post.created_ts, reverse=True)
-    return ordered[:FEED_LIMIT]
+    return sorted(unique.values(), key=lambda post: post.created_ts, reverse=True)
 
 
 @app.get("/api/feed")
-def api_feed(force: bool = False):
+def api_feed(cursor: str = "", force: bool = False):
     client = get_client()
     store = get_store()
     policy = WhitelistPolicy(store, self_uid=resolve_self_uid(client))
-    groups = [client.fetch_feed(force=force)]
-    for entry in store.added_entries():
-        try:
-            groups.append(client.fetch_user_timeline(entry.uid, force=force))
-        except WeiboAuthError:
-            raise
-        except WeiboError:
-            continue
-    posts = visible_posts(merge_posts(groups), policy)
-    return {"items": [post_view(post, manual=store.is_added(post.author.uid))
-                      for post in posts]}
+    posts, next_cursor = client.fetch_feed(max_id=cursor or "0", force=force)
+    if not cursor:
+        groups = [posts]
+        for entry in store.added_entries():
+            try:
+                groups.append(client.fetch_user_timeline(entry.uid, force=force))
+            except WeiboAuthError:
+                raise
+            except WeiboError:
+                continue
+        posts = merge_posts(groups)
+    items = [post_view(post, manual=store.is_added(post.author.uid))
+             for post in visible_posts(posts, policy)]
+    return {"items": items, "next_cursor": next_cursor}
 
 
 @app.get("/api/status/{mid}")

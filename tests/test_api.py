@@ -14,13 +14,13 @@ def u(uid: str, following: bool, avatar: str = "") -> User:
 class FakeClient:
     settings = load_settings()
 
-    def fetch_feed(self, force=False):
+    def fetch_feed(self, max_id="0", force=False):
         return [
             Post(mid="1", author=u("a", True, "https://tvax1.sinaimg.cn/a.jpg"),
                  text="hello", pics=["https://wx2.sinaimg.cn/p.jpg"], created_ts=100.0),
             Post(mid="2", author=u("b", False), text="stranger", created_ts=90.0),
             Post(mid="3", author=u("c", True), text="ad", is_ad=True, created_ts=95.0),
-        ]
+        ], "777"
 
     def fetch_status(self, mid):
         return Post(mid=mid, author=u("a", True), text="post")
@@ -75,8 +75,32 @@ def make_client(monkeypatch, tmp_path, store=None):
 
 def test_feed_filters_ads_and_strangers(monkeypatch, tmp_path):
     resp = make_client(monkeypatch, tmp_path).get("/api/feed")
+    body = resp.json()
+    assert [item["mid"] for item in body["items"]] == ["1"]
+    assert body["next_cursor"] == "777"
+
+
+def test_feed_cursor_pages_without_added_timelines(monkeypatch, tmp_path):
+    recorded = []
+
+    class CursorClient(FakeClient):
+        def fetch_feed(self, max_id="0", force=False):
+            recorded.append(max_id)
+            return [Post(mid="5", author=u("a", True), created_ts=1.0)], "888"
+
+        def fetch_user_timeline(self, uid, force=False):
+            recorded.append(f"timeline:{uid}")
+            return []
+
+    store = WhitelistStore(tmp_path / "wl.json")
+    store.add(WhitelistEntry(uid="z", name="uz"))
+    monkeypatch.setattr(main, "get_client", lambda: CursorClient())
+    monkeypatch.setattr(main, "get_store", lambda: store)
+    resp = TestClient(main.app, raise_server_exceptions=False).get("/api/feed?cursor=999")
     assert resp.status_code == 200
-    assert [item["mid"] for item in resp.json()["items"]] == ["1"]
+    assert [item["mid"] for item in resp.json()["items"]] == ["5"]
+    assert resp.json()["next_cursor"] == "888"
+    assert recorded == ["999"]
 
 
 def test_feed_merges_manual_added_timeline(monkeypatch, tmp_path):
@@ -116,8 +140,8 @@ def test_replies_endpoint_filters_pair_rule(monkeypatch, tmp_path):
 
 def test_feed_keeps_own_posts(monkeypatch, tmp_path):
     class SelfClient(FakeClient):
-        def fetch_feed(self, force=False):
-            return [Post(mid="4", author=u("self", False), text="mine", created_ts=50.0)]
+        def fetch_feed(self, max_id="0", force=False):
+            return [Post(mid="4", author=u("self", False), text="mine", created_ts=50.0)], "0"
 
     monkeypatch.setattr(main, "get_client", lambda: SelfClient())
     monkeypatch.setattr(main, "get_store",
@@ -238,9 +262,9 @@ def test_feed_force_query_passes_through(monkeypatch, tmp_path):
     recorded = {}
 
     class RecordingClient(FakeClient):
-        def fetch_feed(self, force=False):
+        def fetch_feed(self, max_id="0", force=False):
             recorded["force"] = force
-            return super().fetch_feed()
+            return super().fetch_feed(max_id=max_id, force=force)
 
     monkeypatch.setattr(main, "get_client", lambda: RecordingClient())
     monkeypatch.setattr(main, "get_store",

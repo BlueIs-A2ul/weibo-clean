@@ -1,4 +1,4 @@
-const state = { mid: null, view: "feed" };
+const state = { mid: null, view: "feed", cursor: "", feedDone: true, loadingMore: false };
 
 const TITLES = { feed: "纯净微博", detail: "帖子详情", whitelist: "白名单管理" };
 
@@ -88,24 +88,64 @@ function commentBody(comment) {
   return box;
 }
 
+function appendPosts(posts) {
+  const feed = $("#feed");
+  for (const post of posts) feed.append(postCard(post, () => openDetail(post.mid)));
+}
+
 async function loadFeed(force = false) {
   hideBanner();
+  state.cursor = "";
+  state.feedDone = true;
+  state.loadingMore = false;
   const feed = $("#feed");
   feed.innerHTML = '<div class="loading">加载中…</div>';
   try {
     const data = await api(force ? "/api/feed?force=1" : "/api/feed");
     feed.innerHTML = "";
     if (!data.items.length) feed.innerHTML = '<div class="loading">没有可显示的内容</div>';
-    for (const post of data.items) feed.append(postCard(post, () => openDetail(post.mid)));
+    appendPosts(data.items);
+    state.cursor = data.next_cursor || "";
+    state.feedDone = !state.cursor;
+    if (state.feedDone && data.items.length) {
+      feed.append(el("div", "loading", "没有更多了"));
+    }
   } catch (error) {
     feed.innerHTML = "";
     showBanner(error.message);
   }
 }
 
+async function loadMoreFeed() {
+  if (state.view !== "feed" || state.loadingMore || state.feedDone || !state.cursor) return;
+  state.loadingMore = true;
+  const feed = $("#feed");
+  const hint = el("div", "loading", "加载中…");
+  feed.append(hint);
+  try {
+    const data = await api(`/api/feed?cursor=${encodeURIComponent(state.cursor)}`);
+    hint.remove();
+    appendPosts(data.items);
+    state.cursor = data.next_cursor || "";
+    if (!state.cursor) {
+      state.feedDone = true;
+      feed.append(el("div", "loading", "没有更多了"));
+    }
+  } catch (error) {
+    hint.textContent = "加载失败，点击重试";
+    hint.addEventListener("click", () => {
+      hint.remove();
+      loadMoreFeed();
+    }, { once: true });
+  } finally {
+    state.loadingMore = false;
+  }
+}
+
 function setView(view) {
   state.view = view;
   $("#feed").hidden = view !== "feed";
+  $("#feed-sentinel").hidden = view !== "feed";
   $("#detail").hidden = view !== "detail";
   $("#whitelist").hidden = view !== "whitelist";
   $("#back-btn").hidden = view === "feed";
@@ -305,4 +345,7 @@ async function loadWhitelist() {
 $("#refresh-btn").addEventListener("click", () => loadFeed(true));
 $("#back-btn").addEventListener("click", () => setView("feed"));
 $("#whitelist-btn").addEventListener("click", () => { setView("whitelist"); loadWhitelist(); });
+new IntersectionObserver((entries) => {
+  if (entries.some((entry) => entry.isIntersecting)) loadMoreFeed();
+}, { rootMargin: "300px" }).observe($("#feed-sentinel"));
 loadFeed();

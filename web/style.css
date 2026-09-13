@@ -38,6 +38,7 @@ body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", san
   padding: 4px 10px; font-size: 13px; cursor: pointer; }
 .hint { color: #86909c; font-size: 13px; padding: 4px 0; }
 .banner.ok { background: #e8f5e9; color: #1b5e20; }
+.sentinel { height: 1px; }
 h2 { font-size: 15px; margin: 0 0 4px; }
 @media (prefers-color-scheme: dark) {
   body { background: #17171a; color: #e5e6eb; }

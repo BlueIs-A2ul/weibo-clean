@@ -69,16 +69,34 @@ def test_auth_error_raised_on_minus_100(monkeypatch):
 
 def test_fetch_feed_parses_statuses(monkeypatch):
     groups = {"ok": 1, "groups": [{"group": [{"title": "全部关注", "gid": "1"}]}]}
-    feed = {"ok": 1, "statuses": [
+    feed = {"ok": 1, "max_id_str": "99", "statuses": [
         {"mid": "100",
          "user": {"idstr": "7", "screen_name": "A", "following": True},
          "text_raw": "hi", "isAd": False, "pic_ids": []}]}
     client, calls = make_client(monkeypatch, [groups, feed])
-    posts = client.fetch_feed()
+    posts, cursor = client.fetch_feed()
     assert posts[0].mid == "100" and posts[0].author.following is True
+    assert cursor == "99"
     assert calls[0][0].endswith("/ajax/feed/allGroups")
     assert calls[1][0].endswith("/ajax/feed/friendstimeline")
     assert calls[1][1]["list_id"] == "1"
+    assert "max_id" not in calls[1][1]
+
+
+def test_fetch_feed_paginates_with_max_id_and_caches_page(monkeypatch):
+    groups = {"ok": 1, "groups": [{"group": [{"title": "全部关注", "gid": "1"}]}]}
+    page1 = {"ok": 1, "max_id_str": "111", "statuses": [
+        {"mid": "1", "user": {"idstr": "7", "following": True}, "pic_ids": []}]}
+    page2 = {"ok": 1, "max_id_str": "0", "statuses": [
+        {"mid": "2", "user": {"idstr": "7", "following": True}, "pic_ids": []}]}
+    client, calls = make_client(monkeypatch, [groups, page1, page2])
+    posts1, cursor1 = client.fetch_feed()
+    assert [p.mid for p in posts1] == ["1"] and cursor1 == "111"
+    posts2, cursor2 = client.fetch_feed(max_id="111")
+    assert [p.mid for p in posts2] == ["2"] and cursor2 == "0"
+    assert calls[2][1]["max_id"] == "111"
+    client.fetch_feed(max_id="111")
+    assert len(calls) == 3
 
 
 def test_fetch_status_parses_top_level_status(monkeypatch):

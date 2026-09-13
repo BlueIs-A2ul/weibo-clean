@@ -106,17 +106,25 @@ class WeiboClient:
                     return self._follow_gid
         raise WeiboError("未找到'全部关注'分组，接口可能已变更")
 
-    def fetch_feed(self, force: bool = False) -> list[Post]:
-        def load() -> list[Post]:
-            gid = self.resolve_follow_gid()
-            data = self._get("/ajax/feed/friendstimeline",
-                             {"list_id": gid, "fid": gid, "refresh": "4",
-                              "since_id": "0", "count": "25"})
-            return [parse_post(raw) for raw in data.get("statuses") or []]
-
+    def fetch_feed(self, max_id: str = "0", force: bool = False) -> tuple[list[Post], str]:
+        key = f"feed:{max_id or '0'}"
         if force:
-            self._cache.delete("feed")
-        return self._cache.get_or_set("feed", load)
+            self._cache.delete(key)
+
+        def load() -> tuple[list[Post], str]:
+            gid = self.resolve_follow_gid()
+            params = {"list_id": gid, "fid": gid, "refresh": "4",
+                      "since_id": "0", "count": "25"}
+            if max_id and max_id != "0":
+                params["max_id"] = max_id
+            data = self._get("/ajax/feed/friendstimeline", params)
+            posts = [parse_post(raw) for raw in data.get("statuses") or []]
+            next_cursor = str(data.get("max_id_str") or data.get("max_id") or "0")
+            if next_cursor == max_id:
+                next_cursor = "0"
+            return posts, next_cursor
+
+        return self._cache.get_or_set(key, load)
 
     def fetch_status(self, mid: str) -> Post:
         def load() -> Post:
