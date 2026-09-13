@@ -200,7 +200,8 @@ def walk(node, following):
 |---|---|---|
 | GET | `/api/feed?cursor=` | 过滤后的关注流，分页 |
 | GET | `/api/status/{mid}` | 帖子详情（含转发原博展开） |
-| GET | `/api/status/{mid}/comments?cursor=` | 过滤后的评论树，分页 |
+| GET | `/api/status/{mid}/comments?cursor=` | 过滤后的评论（返回 post + threads，首屏不等待孤儿楼） |
+| GET | `/api/status/{mid}/orphans` | 其他讨论中可见的孤儿回复（前端评论渲染后后台加载） |
 | GET | `/api/settings` / `PUT /api/settings` | 过滤开关（R3 原博显示、孤儿策略、TTL） |
 | POST | `/api/auth/cookie` | 更新 Cookie（格式同 weibo-follows 的 cookie.txt） |
 | GET | `/api/auth/status` | Cookie 是否有效 |

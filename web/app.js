@@ -121,28 +121,26 @@ async function openDetail(mid) {
   const detail = $("#detail");
   detail.innerHTML = '<div class="loading">加载中…</div>';
   try {
-    const [statusData, commentsData] = await Promise.all([
-      api(`/api/status/${mid}`),
-      api(`/api/status/${mid}/comments`),
-    ]);
-    renderDetail(statusData.post, commentsData);
+    const data = await api(`/api/status/${mid}/comments`);
+    renderDetail(data.post, data.threads);
+    loadOrphans(mid);
   } catch (error) {
     detail.innerHTML = "";
     showBanner(error.message);
   }
 }
 
-function renderDetail(post, comments) {
+function renderDetail(post, threads) {
   const detail = $("#detail");
   detail.innerHTML = "";
   detail.append(postCard(post, null));
 
   const section = el("section", "card");
   section.append(el("h2", null, "评论（只显示白名单内的人）"));
-  if (!comments.threads.length && !comments.orphans.length) {
+  if (!threads.length) {
     section.append(el("div", "loading", "没有可显示的评论"));
   }
-  for (const thread of comments.threads) {
+  for (const thread of threads) {
     const box = commentBody(thread);
     if (thread.total_replies > 0) {
       const replies = el("div", "replies");
@@ -154,11 +152,25 @@ function renderDetail(post, comments) {
     }
     section.append(box);
   }
-  if (comments.orphans.length) {
-    section.append(el("h2", null, "其他讨论中白名单成员的回复"));
-    for (const orphan of comments.orphans) section.append(commentBody(orphan));
-  }
   detail.append(section);
+}
+
+async function loadOrphans(mid) {
+  const detail = $("#detail");
+  const hint = el("div", "loading", "正在检查其他讨论…");
+  detail.append(hint);
+  try {
+    const data = await api(`/api/status/${mid}/orphans`);
+    hint.remove();
+    if (!data.items.length) return;
+    const section = el("section", "card");
+    section.append(el("h2", null, "其他讨论中白名单成员的回复"));
+    for (const orphan of data.items) section.append(commentBody(orphan));
+    detail.append(section);
+  } catch (error) {
+    hint.remove();
+    showBanner(error.message);
+  }
 }
 
 async function expandReplies(rootCid, container, button) {

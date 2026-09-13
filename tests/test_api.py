@@ -95,12 +95,18 @@ def test_added_user_hidden_when_removed(monkeypatch, tmp_path):
     assert make_client(monkeypatch, tmp_path, store).get("/api/feed").json()["items"] == []
 
 
-def test_comments_returns_threads_and_promoted_orphans(monkeypatch, tmp_path):
+def test_comments_returns_post_and_threads(monkeypatch, tmp_path):
     resp = make_client(monkeypatch, tmp_path).get("/api/status/100/comments")
     body = resp.json()
+    assert body["post"]["mid"] == "100"
     assert [t["cid"] for t in body["threads"]] == ["10", "12", "13"]
-    assert [o["cid"] for o in body["orphans"]] == ["21"]
-    assert body["orphans"][0]["promoted"] is True
+
+
+def test_orphans_endpoint_returns_promoted_hidden_replies(monkeypatch, tmp_path):
+    resp = make_client(monkeypatch, tmp_path).get("/api/status/100/orphans")
+    body = resp.json()
+    assert [o["cid"] for o in body["items"]] == ["21"]
+    assert body["items"][0]["promoted"] is True
 
 
 def test_replies_endpoint_filters_pair_rule(monkeypatch, tmp_path):

@@ -202,14 +202,27 @@ def api_comments(mid: str):
     post = client.fetch_status(mid)
     roots = client.fetch_root_comments(mid, post.author.uid)
     threads = [comment_view(root) for root in filter_roots(roots, policy)]
-    hidden = [root for root in roots if not is_visible(root, policy) and root.total_replies > 0]
+    return {
+        "post": post_view(post, manual=get_store().is_added(post.author.uid)),
+        "threads": threads,
+    }
+
+
+@app.get("/api/status/{mid}/orphans")
+def api_orphans(mid: str):
+    client = get_client()
+    policy = policy_with_following(client)
+    post = client.fetch_status(mid)
+    roots = client.fetch_root_comments(mid, post.author.uid)
+    hidden = [root for root in roots
+              if not is_visible(root, policy) and root.total_replies > 0]
     hidden.sort(key=lambda root: root.total_replies, reverse=True)
-    orphans: list[dict] = []
+    items: list[dict] = []
     for root in hidden[: client.settings.max_orphan_threads]:
         replies = client.fetch_replies(root.cid, mid, post.author.uid)
-        orphans.extend(comment_view(reply)
-                       for reply in visible_replies(replies, policy, promoted=True))
-    return {"threads": threads, "orphans": orphans}
+        items.extend(comment_view(reply)
+                     for reply in visible_replies(replies, policy, promoted=True))
+    return {"items": items}
 
 
 @app.get("/api/comment/{root_cid}/replies")

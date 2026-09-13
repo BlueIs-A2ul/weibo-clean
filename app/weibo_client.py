@@ -36,6 +36,7 @@ class WeiboClient:
         self._settings = settings
         self._session = requests.Session()
         self._cache = TTLCache(settings.cache_ttl_seconds)
+        self._following_cache = TTLCache(settings.following_cache_ttl)
         self._follow_gid: str | None = None
 
     @property
@@ -167,7 +168,7 @@ class WeiboClient:
                 page += 1
             return list(users.values())
 
-        return self._cache.get_or_set("following", load)
+        return self._following_cache.get_or_set("following", load)
 
     def fetch_user(self, uid: str) -> User | None:
         data = self._get("/ajax/profile/info", {"uid": uid})
