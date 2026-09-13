@@ -18,11 +18,14 @@ from .whitelist import WhitelistStore
 class WhitelistPolicy:
     store: WhitelistStore
     following_uids: frozenset[str] | None = None
+    self_uid: str | None = None
 
     def allows(self, user: User | None) -> bool:
         if user is None or not user.uid:
             return False
         uid = user.uid
+        if self.self_uid and uid == self.self_uid:
+            return True
         if self.store.is_removed(uid):
             return False
         if user.following:

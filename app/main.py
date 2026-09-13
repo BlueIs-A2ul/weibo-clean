@@ -122,7 +122,16 @@ def entry_view(entry: WhitelistEntry) -> dict:
 def policy_with_following(client: WeiboClient) -> WhitelistPolicy:
     """评论接口的 user.following 字段不可信（恒为 false），需用本地关注集合判定。"""
     following = frozenset(user.uid for user in client.fetch_following())
-    return WhitelistPolicy(get_store(), following)
+    return WhitelistPolicy(get_store(), following, resolve_self_uid(client))
+
+
+def resolve_self_uid(client: WeiboClient) -> str | None:
+    try:
+        return client.fetch_self_uid()
+    except WeiboAuthError:
+        raise
+    except WeiboError:
+        return None
 
 
 class AddBody(BaseModel):
@@ -166,7 +175,7 @@ def merge_posts(groups: list[list[Post]]) -> list[Post]:
 def api_feed(force: bool = False):
     client = get_client()
     store = get_store()
-    policy = WhitelistPolicy(store)
+    policy = WhitelistPolicy(store, self_uid=resolve_self_uid(client))
     groups = [client.fetch_feed(force=force)]
     for entry in store.added_entries():
         try:

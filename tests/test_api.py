@@ -31,6 +31,8 @@ class FakeClient:
             Comment(cid="11", author=u("x", False), text="hidden root", total_replies=2),
             Comment(cid="12", author=u("d", False), text="followed but flag false",
                     total_replies=0),
+            Comment(cid="13", author=u("self", False), text="my own comment",
+                    total_replies=0),
         ]
 
     def fetch_replies(self, root_cid, mid, author_uid):
@@ -42,10 +44,15 @@ class FakeClient:
                     target=u("c", False)),
             Comment(cid="22", author=u("b", True), text="reply to stranger",
                     target=u("q", False)),
+            Comment(cid="23", author=u("b", True), text="reply to me",
+                    target=u("self", False)),
         ]
 
     def fetch_following(self):
         return [u("a", True), u("c", True), u("d", True), u("z", False)]
+
+    def fetch_self_uid(self):
+        return "self"
 
     def fetch_user(self, uid):
         if uid == "404":
@@ -91,14 +98,26 @@ def test_added_user_hidden_when_removed(monkeypatch, tmp_path):
 def test_comments_returns_threads_and_promoted_orphans(monkeypatch, tmp_path):
     resp = make_client(monkeypatch, tmp_path).get("/api/status/100/comments")
     body = resp.json()
-    assert [t["cid"] for t in body["threads"]] == ["10", "12"]
+    assert [t["cid"] for t in body["threads"]] == ["10", "12", "13"]
     assert [o["cid"] for o in body["orphans"]] == ["21"]
     assert body["orphans"][0]["promoted"] is True
 
 
 def test_replies_endpoint_filters_pair_rule(monkeypatch, tmp_path):
     resp = make_client(monkeypatch, tmp_path).get("/api/comment/10/replies?mid=100")
-    assert [item["cid"] for item in resp.json()["items"]] == ["20"]
+    assert [item["cid"] for item in resp.json()["items"]] == ["20", "23"]
+
+
+def test_feed_keeps_own_posts(monkeypatch, tmp_path):
+    class SelfClient(FakeClient):
+        def fetch_feed(self, force=False):
+            return [Post(mid="4", author=u("self", False), text="mine", created_ts=50.0)]
+
+    monkeypatch.setattr(main, "get_client", lambda: SelfClient())
+    monkeypatch.setattr(main, "get_store",
+                        lambda: WhitelistStore(tmp_path / "whitelist.json"))
+    resp = TestClient(main.app, raise_server_exceptions=False).get("/api/feed")
+    assert [item["mid"] for item in resp.json()["items"]] == ["4"]
 
 
 def test_whitelist_add_parses_uid_and_stores(monkeypatch, tmp_path):

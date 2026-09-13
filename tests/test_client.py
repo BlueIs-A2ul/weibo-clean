@@ -6,7 +6,7 @@ import pytest
 from app import weibo_client
 from app.cache import TTLCache
 from app.config import Settings
-from app.weibo_client import WeiboAuthError, WeiboClient, WeiboRateLimitError
+from app.weibo_client import WeiboAuthError, WeiboClient, WeiboError, WeiboRateLimitError
 
 SETTINGS = Settings(cookie_file=Path("unused"), request_min_delay=0, request_max_delay=0)
 
@@ -202,3 +202,36 @@ def test_fetch_replies_paginates(monkeypatch):
     assert [c.cid for c in replies] == ["a", "b"]
     assert calls[1][1]["id"] == "9" and calls[1][1]["fetch_level"] == "1"
     assert calls[1][1]["max_id"] == "55"
+
+
+def test_fetch_self_uid_parses_home_html_and_caches(monkeypatch):
+    client = WeiboClient("SUB=test", SETTINGS)
+    calls = []
+
+    class HtmlResponse:
+        status_code = 200
+        text = '<html><script>var config = {"uid":1234567890,"x":1}</script></html>'
+
+    def fake_get(url, headers=None, timeout=None):
+        calls.append(url)
+        return HtmlResponse()
+
+    monkeypatch.setattr(weibo_client.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(client._session, "get", fake_get)
+    assert client.fetch_self_uid() == "1234567890"
+    assert client.fetch_self_uid() == "1234567890"
+    assert calls == ["https://weibo.com/"]
+
+
+def test_fetch_self_uid_raises_without_uid(monkeypatch):
+    client = WeiboClient("SUB=test", SETTINGS)
+
+    class NoUidResponse:
+        status_code = 200
+        text = "<html></html>"
+
+    monkeypatch.setattr(weibo_client.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(client._session, "get",
+                        lambda url, headers=None, timeout=None: NoUidResponse())
+    with pytest.raises(WeiboError):
+        client.fetch_self_uid()

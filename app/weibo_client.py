@@ -1,4 +1,5 @@
 import random
+import re
 import time
 from typing import Any
 
@@ -10,6 +11,7 @@ from .models import Comment, Post, User
 from .parsing import parse_post, parse_reply, parse_root_comment, parse_user
 
 BASE = "https://weibo.com"
+SELF_UID_RE = re.compile(r'"uid":\s*"?(\d+)')
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -171,6 +173,24 @@ class WeiboClient:
         data = self._get("/ajax/profile/info", {"uid": uid})
         raw = (data.get("data") or {}).get("user")
         return parse_user(raw) if isinstance(raw, dict) else None
+
+    def fetch_self_uid(self) -> str:
+        def load() -> str:
+            time.sleep(random.uniform(self._settings.request_min_delay,
+                                      self._settings.request_max_delay))
+            try:
+                resp = self._session.get(BASE + "/", headers=self._headers(),
+                                         timeout=self._settings.request_timeout)
+            except requests.RequestException as exc:
+                raise WeiboError(f"网络请求失败: {exc}") from exc
+            if resp.status_code in (401, 403):
+                raise WeiboAuthError("Cookie 已失效，请更新 cookie.txt 后重试")
+            match = SELF_UID_RE.search(resp.text or "")
+            if not match:
+                raise WeiboError("无法从首页解析登录者 uid，Cookie 可能已失效")
+            return match.group(1)
+
+        return self._cache.get_or_set("self_uid", load)
 
     def fetch_user_timeline(self, uid: str, force: bool = False) -> list[Post]:
         def load() -> list[Post]:
