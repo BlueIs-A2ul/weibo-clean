@@ -9,7 +9,7 @@ body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", san
   padding: 6px 10px; font-size: 14px; }
 .banner { margin: 8px 12px; padding: 10px 12px; border-radius: 8px; background: #fde2e2;
   color: #a8071a; font-size: 14px; }
-.feed, .detail { max-width: 640px; margin: 0 auto; padding: 8px 8px 48px; }
+.feed, .detail, .whitelist { max-width: 640px; margin: 0 auto; padding: 8px 8px 48px; }
 .card { background: #fff; border-radius: 10px; padding: 12px; margin: 8px 0; }
 .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .avatar { width: 36px; height: 36px; border-radius: 50%; background: #e5e6eb; object-fit: cover; }
@@ -28,6 +28,16 @@ body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", san
 .more-btn { border: none; background: none; color: #165dff; font-size: 13px; padding: 4px 0;
   cursor: pointer; }
 .loading { text-align: center; color: #86909c; padding: 16px; font-size: 14px; }
+.text-input { width: 100%; padding: 8px 10px; margin: 6px 0; border: 1px solid #d0d3d9;
+  border-radius: 6px; font-size: 14px; background: #fff; color: inherit; }
+.rows { max-height: 50vh; overflow-y: auto; }
+.row { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  border-top: 1px solid #f0f1f3; }
+.row .name { flex: 1; }
+.row-btn { border: 1px solid #d0d3d9; background: #fff; color: inherit; border-radius: 6px;
+  padding: 4px 10px; font-size: 13px; cursor: pointer; }
+.hint { color: #86909c; font-size: 13px; padding: 4px 0; }
+.banner.ok { background: #e8f5e9; color: #1b5e20; }
 h2 { font-size: 15px; margin: 0 0 4px; }
 @media (prefers-color-scheme: dark) {
   body { background: #17171a; color: #e5e6eb; }
@@ -35,4 +45,7 @@ h2 { font-size: 15px; margin: 0 0 4px; }
   .topbar button { background: #232324; border-color: #3a3a3c; }
   .retweet { background: #2b2b2d; }
   .comment, .replies { border-color: #2e2e30; }
+  .text-input, .row-btn { background: #232324; border-color: #3a3a3c; }
+  .row { border-color: #2e2e30; }
+  .banner.ok { background: #1e3a24; color: #7ee2a8; }
 }

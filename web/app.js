@@ -1,14 +1,24 @@
 const state = { mid: null, view: "feed" };
 
+const TITLES = { feed: "纯净微博", detail: "帖子详情", whitelist: "白名单管理" };
+
 const $ = (selector) => document.querySelector(selector);
 
-async function api(path) {
-  const resp = await fetch(path);
+async function api(path, options) {
+  const resp = await fetch(path, options);
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     throw new Error(body.error || `请求失败（HTTP ${resp.status}）`);
   }
   return resp.json();
+}
+
+function post(path, payload) {
+  return api(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 function el(tag, className, text) {
@@ -18,26 +28,32 @@ function el(tag, className, text) {
   return node;
 }
 
-function showBanner(message) {
+function showBanner(message, ok = false) {
   const banner = $("#banner");
   banner.textContent = message;
   banner.hidden = false;
+  banner.classList.toggle("ok", ok);
 }
 
 function hideBanner() { $("#banner").hidden = true; }
 
-function userHead(user) {
-  const head = el("div", "head");
+function avatarImg(url) {
   const avatar = el("img", "avatar");
-  avatar.src = user.avatar || "";
+  avatar.src = url || "";
   avatar.alt = "";
-  head.append(avatar, el("span", "name", user.name));
+  return avatar;
+}
+
+function userHead(user, manual = false) {
+  const head = el("div", "head");
+  head.append(avatarImg(user.avatar), el("span", "name", user.name));
+  if (manual) head.append(el("span", "tag", "白名单"));
   return head;
 }
 
 function postCard(post, onClick) {
   const card = el("article", "card");
-  card.append(userHead(post.author));
+  card.append(userHead(post.author, post.manual));
   card.append(el("div", "text", post.text));
   if (post.pics.length) {
     const pics = el("div", "pics");
@@ -64,10 +80,7 @@ function postCard(post, onClick) {
 function commentBody(comment) {
   const box = el("div", "comment");
   const head = el("div", "head");
-  const avatar = el("img", "avatar");
-  avatar.src = comment.author.avatar || "";
-  avatar.alt = "";
-  head.append(avatar, el("span", "name", comment.author.name));
+  head.append(avatarImg(comment.author.avatar), el("span", "name", comment.author.name));
   if (comment.target) head.append(el("span", "target", `回复 @${comment.target.name}`));
   if (comment.promoted) head.append(el("span", "tag", "上下文已隐藏"));
   box.append(head);
@@ -94,9 +107,11 @@ function setView(view) {
   state.view = view;
   $("#feed").hidden = view !== "feed";
   $("#detail").hidden = view !== "detail";
+  $("#whitelist").hidden = view !== "whitelist";
   $("#back-btn").hidden = view === "feed";
   $("#refresh-btn").hidden = view !== "feed";
-  $("#title").textContent = view === "feed" ? "纯净微博" : "帖子详情";
+  $("#whitelist-btn").hidden = view !== "feed";
+  $("#title").textContent = TITLES[view] || "纯净微博";
   window.scrollTo(0, 0);
 }
 
@@ -123,7 +138,7 @@ function renderDetail(post, comments) {
   detail.append(postCard(post, null));
 
   const section = el("section", "card");
-  section.append(el("h2", null, "评论（只显示你关注的人）"));
+  section.append(el("h2", null, "评论（只显示白名单内的人）"));
   if (!comments.threads.length && !comments.orphans.length) {
     section.append(el("div", "loading", "没有可显示的评论"));
   }
@@ -140,7 +155,7 @@ function renderDetail(post, comments) {
     section.append(box);
   }
   if (comments.orphans.length) {
-    section.append(el("h2", null, "其他讨论中你关注的人的回复"));
+    section.append(el("h2", null, "其他讨论中白名单成员的回复"));
     for (const orphan of comments.orphans) section.append(commentBody(orphan));
   }
   detail.append(section);
@@ -161,6 +176,121 @@ async function expandReplies(rootCid, container, button) {
   }
 }
 
+function whitelistRow(user, actionLabel, action) {
+  const row = el("div", "row");
+  row.append(avatarImg(user.avatar), el("span", "name", user.name));
+  if (actionLabel) {
+    const button = el("button", "row-btn", actionLabel);
+    button.type = "button";
+    button.addEventListener("click", () => action(button));
+    row.append(button);
+  }
+  return row;
+}
+
+function section(title) {
+  const box = el("section", "card");
+  box.append(el("h2", null, title));
+  return box;
+}
+
+async function whitelistAction(button, path, payload, okMessage) {
+  button.disabled = true;
+  try {
+    await post(path, payload);
+    showBanner(okMessage, true);
+    await loadWhitelist();
+  } catch (error) {
+    button.disabled = false;
+    showBanner(error.message);
+  }
+}
+
+function renderWhitelist(data) {
+  const page = $("#whitelist");
+  page.innerHTML = "";
+
+  const addSection = section("添加白名单");
+  const input = el("input", "text-input");
+  input.placeholder = "粘贴主页链接或 UID";
+  const addButton = el("button", "row-btn", "添加");
+  addButton.type = "button";
+  const submit = async () => {
+    const value = input.value.trim();
+    if (!value) {
+      showBanner("请输入主页链接或 UID");
+      return;
+    }
+    addButton.disabled = true;
+    try {
+      const result = await post("/api/whitelist/add", { input: value });
+      showBanner(result.following ? "已添加（TA 已在你的关注中）" : `已添加 ${result.name}`, true);
+      input.value = "";
+      await loadWhitelist();
+    } catch (error) {
+      addButton.disabled = false;
+      showBanner(error.message);
+    }
+  };
+  addButton.addEventListener("click", submit);
+  input.addEventListener("keydown", (event) => { if (event.key === "Enter") submit(); });
+  addSection.append(input, addButton);
+  page.append(addSection);
+
+  const addedSection = section("手动添加");
+  if (!data.added.length) addedSection.append(el("div", "hint", "暂无手动添加的人"));
+  for (const entry of data.added) {
+    addedSection.append(whitelistRow(entry, "移除", (button) =>
+      whitelistAction(button, "/api/whitelist/remove", { uid: entry.uid }, "已移除")));
+  }
+  page.append(addedSection);
+
+  const followingSection = section("关注中");
+  const visible = data.following.filter((user) => !user.hidden);
+  if (!visible.length) {
+    followingSection.append(el("div", "hint", "暂无"));
+  } else {
+    const filter = el("input", "text-input");
+    filter.placeholder = "筛选昵称或 UID";
+    const rows = el("div", "rows");
+    const renderRows = () => {
+      rows.innerHTML = "";
+      const keyword = filter.value.trim().toLowerCase();
+      const matched = visible.filter((user) =>
+        !keyword || user.name.toLowerCase().includes(keyword) || user.uid.includes(keyword));
+      if (!matched.length) rows.append(el("div", "hint", "没有匹配的人"));
+      for (const user of matched) {
+        rows.append(whitelistRow(user, "隐藏", (button) =>
+          whitelistAction(button, "/api/whitelist/remove", { uid: user.uid }, "已隐藏")));
+      }
+    };
+    filter.addEventListener("input", renderRows);
+    renderRows();
+    followingSection.append(filter, rows);
+  }
+  page.append(followingSection);
+
+  const removedSection = section("已隐藏");
+  if (!data.removed.length) removedSection.append(el("div", "hint", "暂无已隐藏的人"));
+  for (const entry of data.removed) {
+    removedSection.append(whitelistRow(entry, "恢复", (button) =>
+      whitelistAction(button, "/api/whitelist/restore", { uid: entry.uid }, "已恢复")));
+  }
+  page.append(removedSection);
+}
+
+async function loadWhitelist() {
+  const page = $("#whitelist");
+  page.innerHTML = '<div class="loading">加载中…（首次获取关注列表约需几秒）</div>';
+  try {
+    renderWhitelist(await api("/api/whitelist"));
+  } catch (error) {
+    page.innerHTML = "";
+    showBanner(error.message);
+  }
+}
+
 $("#refresh-btn").addEventListener("click", () => loadFeed(true));
 $("#back-btn").addEventListener("click", () => setView("feed"));
+$("#whitelist-btn").addEventListener("click", () => { setView("whitelist"); loadWhitelist(); });
 loadFeed();
