@@ -16,6 +16,7 @@ class Post:
     text: str = ""
     pics: list[str] = field(default_factory=list)
     created_at: str = ""
+    created_ts: float = 0.0
     is_ad: bool = False
     retweeted: "Post | None" = None
     reposts_count: int = 0

@@ -95,3 +95,25 @@ def test_parse_reply_without_reply_comment_has_no_target():
     reply = parse_reply({"id": "1", "rootid": "9",
                          "user": {"idstr": "1", "following": True}})
     assert reply.target is None and reply.root_cid == "9"
+
+from app.parsing import parse_created_ts
+
+
+def test_parse_created_ts_weibo_format():
+    assert parse_created_ts('Sat Sep 13 20:00:00 +0800 2026') > 0
+
+
+def test_parse_created_ts_iso_format():
+    assert parse_created_ts('2026-09-13T20:00:00+08:00') > 0
+
+
+def test_parse_created_ts_invalid_returns_zero():
+    assert parse_created_ts('刚刚') == 0.0
+    assert parse_created_ts(None) == 0.0
+
+
+def test_parse_post_reads_created_ts():
+    raw = {'mid': '1', 'user': {'idstr': '1'},
+           'created_at': 'Sat Sep 13 20:00:00 +0800 2026'}
+    assert parse_post(raw).created_ts > 0
+
