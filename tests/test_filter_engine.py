@@ -47,3 +47,16 @@ def test_visible_posts_drops_ads_and_strangers():
 
     items = visible_posts([post("1", True), post("2", True, is_ad=True), post("3", False)])
     assert [p.mid for p in items] == ["1"]
+
+
+def test_promoted_returns_copies_without_mutating_inputs():
+    original = reply("10", True, True)
+    kept = visible_replies([original], promoted=True)
+    assert original.promoted is False
+    assert kept[0] is not original
+    assert kept[0].promoted is True
+
+
+def test_plain_visible_replies_return_originals():
+    original = reply("10", True, True)
+    assert visible_replies([original])[0] is original

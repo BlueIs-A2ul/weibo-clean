@@ -11,10 +11,11 @@ from dataclasses import replace
 from .models import Comment, Post
 
 
-def is_visible(node: Comment) -> bool:
-    if not node.author.following:
+def is_visible(comment: Comment) -> bool:
+    """仅适用于 Comment。target 为 None（一级评论）时只检查作者是否被关注。"""
+    if not comment.author.following:
         return False
-    if node.target is not None and not node.target.following:
+    if comment.target is not None and not comment.target.following:
         return False
     return True
 
@@ -24,7 +25,7 @@ def filter_roots(roots: list[Comment]) -> list[Comment]:
 
 
 def visible_replies(replies: list[Comment], promoted: bool = False) -> list[Comment]:
-    """返回可见回复。promoted=True 时返回标记了"上下文已隐藏"的副本（不修改原对象）。"""
+    """返回可见回复。promoted=True 时返回标记了"上下文已隐藏"的副本（不修改原对象）。promoted=False 时返回原对象（调用方不得修改）。"""
     kept = [reply for reply in replies if is_visible(reply)]
     if promoted:
         return [replace(reply, promoted=True) for reply in kept]
