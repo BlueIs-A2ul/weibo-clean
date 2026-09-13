@@ -89,7 +89,9 @@ class WeiboClient:
             return self._follow_gid
         data = self.fetch_all_groups()
         for group in data.get("groups") or []:
-            for item in (group or {}).get("group") or []:
+            if not isinstance(group, dict):
+                continue
+            for item in group.get("group") or []:
                 if isinstance(item, dict) and item.get("title") == "全部关注" and item.get("gid"):
                     self._follow_gid = str(item["gid"])
                     return self._follow_gid

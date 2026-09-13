@@ -12,13 +12,13 @@ class TTLCache:
         if item is None:
             return None
         expires_at, value = item
-        if time.time() > expires_at:
-            del self._items[key]
+        if time.monotonic() > expires_at:
+            self._items.pop(key, None)
             return None
         return value
 
     def set(self, key: str, value: Any) -> None:
-        self._items[key] = (time.time() + self._ttl, value)
+        self._items[key] = (time.monotonic() + self._ttl, value)
 
     def get_or_set(self, key: str, factory: Callable[[], Any]) -> Any:
         value = self.get(key)

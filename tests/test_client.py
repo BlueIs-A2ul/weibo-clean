@@ -4,8 +4,9 @@ from pathlib import Path
 import pytest
 
 from app import weibo_client
+from app.cache import TTLCache
 from app.config import Settings
-from app.weibo_client import WeiboAuthError, WeiboClient
+from app.weibo_client import WeiboAuthError, WeiboClient, WeiboRateLimitError
 
 SETTINGS = Settings(cookie_file=Path("unused"), request_min_delay=0, request_max_delay=0)
 
@@ -79,3 +80,39 @@ def test_fetch_replies_parses_target(monkeypatch):
     replies = client.fetch_replies("555", "100", "7")
     assert replies[0].cid == "666"
     assert replies[0].target is not None and replies[0].target.uid == "2"
+
+
+def test_ttl_cache_hits_and_expires(monkeypatch):
+    now = {"value": 100.0}
+    monkeypatch.setattr("app.cache.time.monotonic", lambda: now["value"])
+    cache = TTLCache(ttl_seconds=10)
+    calls = []
+    value = cache.get_or_set("k", lambda: calls.append(1) or "v")
+    assert value == "v" and len(calls) == 1
+    assert cache.get_or_set("k", lambda: calls.append(2) or "other") == "v"
+    assert len(calls) == 1
+    now["value"] = 111.0
+    assert cache.get("k") is None
+
+
+def test_rate_limit_error_raised_on_rejection(monkeypatch):
+    client, _ = make_client(monkeypatch, [{"ok": 0, "errno": 99999}])
+    with pytest.raises(WeiboRateLimitError):
+        client.fetch_all_groups()
+
+
+def test_resolve_follow_gid_ignores_malformed_groups(monkeypatch):
+    groups = {"ok": 1, "groups": ["oops", {"group": [{"title": "全部关注", "gid": "42"}]}]}
+    client, _ = make_client(monkeypatch, [groups])
+    assert client.resolve_follow_gid() == "42"
+
+
+def test_fetch_root_comments_params_and_parsing(monkeypatch):
+    data = {"ok": 1, "data": [{"id": "555",
+                               "user": {"idstr": "1", "screen_name": "A", "following": True},
+                               "text_raw": "一级评论", "total_number": 2}]}
+    client, calls = make_client(monkeypatch, [data])
+    comments = client.fetch_root_comments("100", "7")
+    assert comments[0].cid == "555" and comments[0].total_replies == 2
+    assert calls[0][1]["fetch_level"] == "0"
+    assert calls[0][1]["uid"] == "7" and calls[0][1]["count"] == "20"
