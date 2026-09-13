@@ -61,6 +61,20 @@ function postCard(post, onClick) {
   return card;
 }
 
+function commentBody(comment) {
+  const box = el("div", "comment");
+  const head = el("div", "head");
+  const avatar = el("img", "avatar");
+  avatar.src = comment.author.avatar || "";
+  avatar.alt = "";
+  head.append(avatar, el("span", "name", comment.author.name));
+  if (comment.target) head.append(el("span", "target", `回复 @${comment.target.name}`));
+  if (comment.promoted) head.append(el("span", "tag", "上下文已隐藏"));
+  box.append(head);
+  box.append(el("div", "text", comment.text));
+  return box;
+}
+
 async function loadFeed() {
   hideBanner();
   const feed = $("#feed");
@@ -86,10 +100,65 @@ function setView(view) {
   window.scrollTo(0, 0);
 }
 
-function openDetail(mid) {
+async function openDetail(mid) {
   state.mid = mid;
   setView("detail");
-  $("#detail").innerHTML = '<div class="loading">详情页将在下一个任务实现</div>';
+  const detail = $("#detail");
+  detail.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    const [statusData, commentsData] = await Promise.all([
+      api(`/api/status/${mid}`),
+      api(`/api/status/${mid}/comments`),
+    ]);
+    renderDetail(statusData.post, commentsData);
+  } catch (error) {
+    detail.innerHTML = "";
+    showBanner(error.message);
+  }
+}
+
+function renderDetail(post, comments) {
+  const detail = $("#detail");
+  detail.innerHTML = "";
+  detail.append(postCard(post, null));
+
+  const section = el("section", "card");
+  section.append(el("h2", null, "评论（只显示你关注的人）"));
+  if (!comments.threads.length && !comments.orphans.length) {
+    section.append(el("div", "loading", "没有可显示的评论"));
+  }
+  for (const thread of comments.threads) {
+    const box = commentBody(thread);
+    if (thread.total_replies > 0) {
+      const replies = el("div", "replies");
+      replies.hidden = true;
+      const button = el("button", "more-btn", `查看 ${thread.total_replies} 条回复`);
+      button.type = "button";
+      button.addEventListener("click", () => expandReplies(thread.cid, replies, button));
+      box.append(button, replies);
+    }
+    section.append(box);
+  }
+  if (comments.orphans.length) {
+    section.append(el("h2", null, "其他讨论中你关注的人的回复"));
+    for (const orphan of comments.orphans) section.append(commentBody(orphan));
+  }
+  detail.append(section);
+}
+
+async function expandReplies(rootCid, container, button) {
+  button.disabled = true;
+  button.textContent = "加载中…";
+  try {
+    const data = await api(`/api/comment/${rootCid}/replies?mid=${state.mid}`);
+    container.innerHTML = "";
+    for (const reply of data.items) container.append(commentBody(reply));
+    container.hidden = false;
+    button.remove();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "加载失败，点击重试";
+  }
 }
 
 $("#refresh-btn").addEventListener("click", loadFeed);
